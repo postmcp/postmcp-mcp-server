@@ -1,0 +1,56 @@
+{
+  "name": "@postmcpai/server",
+  "version": "1.0.0",
+  "description": "Official Model Context Protocol (MCP) Server for PostMCP AI. Integrate multi-platform social media publishing into your AI clients, Claude.ai, Cursor, and Custom GPTs.",
+  "type": "module",
+  "main": "./src/index.js",
+  "bin": {
+    "postmcpai-server": "./bin/cli.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "index.js",
+    "README.md",
+    "LICENSE",
+    ".env.example"
+  ],
+  "scripts": {
+    "start": "node index.js",
+    "start:sse": "PORT=3000 node index.js",
+    "start:stdio": "node index.js",
+    "dev": "PORT=3000 node --watch index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "cors": "^2.8.6",
+    "dotenv": "^16.4.5",
+    "express": "^5.2.1"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "postmcp",
+    "postmcpai",
+    "social-media",
+    "linkedin",
+    "twitter",
+    "facebook",
+    "instagram",
+    "threads",
+    "bluesky",
+    "claude",
+    "chatgpt",
+    "cursor"
+  ],
+  "author": "PostMCP AI <support@postmcpai.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/postmcpai/postmcp-mcp-server.git"
+  },
+  "bugs": {
+    "url": "https://github.com/postmcpai/postmcp-mcp-server/issues"
+  },
+  "homepage": "https://postmcpai.com"
+}
