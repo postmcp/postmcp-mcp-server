@@ -173,7 +173,16 @@ router.post("/api/tools/:name", express.json(), async (req, res) => {
         break;
       }
       case "create_post": {
-        const payload = { content: args.content, platforms: args.platforms, publishImmediately: args.publishImmediately ?? false, scheduleDate: args.scheduleDate || "", scheduleTime: args.scheduleTime || "", mediaUrl: args.mediaUrl || "" };
+        const payload = {
+          content: args.content,
+          platforms: args.platforms,
+          targetAccounts: args.targetAccounts,
+          publishImmediately: args.publishImmediately ?? false,
+          scheduleDate: args.scheduleDate || "",
+          scheduleTime: args.scheduleTime || "",
+          mediaUrl: args.mediaUrl || "",
+          imageData: args.imageData || null
+        };
         resultData = await makeBackendRequest("/post/create", "POST", payload, apiKey);
         break;
       }

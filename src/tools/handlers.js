@@ -92,10 +92,12 @@ export const handleToolCall = async (name, args, getApiKey) => {
         const payload = {
           content: args.content,
           platforms: args.platforms,
+          targetAccounts: args.targetAccounts,
           publishImmediately: args.publishImmediately ?? false,
           scheduleDate: args.scheduleDate || "",
           scheduleTime: args.scheduleTime || "",
           mediaUrl: args.mediaUrl || "",
+          imageData: args.imageData || null,
         };
         const result = await callBackend("/post/create", "POST", payload);
         return {

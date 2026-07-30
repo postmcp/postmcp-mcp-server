@@ -28,7 +28,7 @@ export const toolDefinitions = [
   },
   {
     name: "create_post",
-    description: "Schedule or publish immediately a post to one or more social media platforms.",
+    description: "Schedule or publish immediately a post to one or more social media platforms or specific accounts.",
     inputSchema: {
       type: "object",
       properties: {
@@ -41,7 +41,19 @@ export const toolDefinitions = [
           description: "Target platforms for the post.",
           items: {
             type: "string",
-            enum: ["linkedin", "twitter", "facebook", "instagram", "threads", "bluesky"],
+          },
+        },
+        targetAccounts: {
+          type: "array",
+          description: "Optional specific target accounts containing platform, profileId, and userId.",
+          items: {
+            type: "object",
+            properties: {
+              platform: { type: "string" },
+              profileId: { type: "string" },
+              userId: { type: "string" },
+              username: { type: "string" },
+            },
           },
         },
         publishImmediately: {
@@ -61,7 +73,7 @@ export const toolDefinitions = [
           description: "Optional public URL of an image/video to attach.",
         },
       },
-      required: ["content", "platforms"],
+      required: ["content"],
     },
   },
   {
