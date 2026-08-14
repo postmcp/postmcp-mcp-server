@@ -66,11 +66,23 @@ export const handleToolCall = async (name, args, getApiKey) => {
       }
 
       case "list_posts": {
-        const posts = await callBackend("/post/list");
+        // /post/list answers with { posts, pagination, counts }; older builds
+        // answered with a bare array.
+        const data = await callBackend("/post/list");
+        const posts = Array.isArray(data) ? data : data?.posts || [];
         const list = posts.map((p) => ({
           id: p._id,
           content: p.content,
           platforms: p.platforms,
+          // Per-profile delivery detail: which profile the post went to and how it fared.
+          targets: (p.targets || []).map((t) => ({
+            platform: t.platform,
+            profileId: t.profileId,
+            username: t.username,
+            status: t.status,
+            postId: t.postId,
+            error: t.error,
+          })),
           status: p.status,
           scheduleDate: p.scheduleDate,
           scheduleTime: p.scheduleTime,
@@ -96,6 +108,9 @@ export const handleToolCall = async (name, args, getApiKey) => {
           publishImmediately: args.publishImmediately ?? false,
           scheduleDate: args.scheduleDate || "",
           scheduleTime: args.scheduleTime || "",
+          // The wall-clock slot above means nothing without the zone it was
+          // picked in; the backend resolves the two into a firing instant.
+          timezone: args.timezone || "",
           mediaUrl: args.mediaUrl || "",
           imageData: args.imageData || null,
         };
@@ -137,9 +152,11 @@ export const handleToolCall = async (name, args, getApiKey) => {
       case "update_post": {
         const payload = {};
         if (args.content !== undefined) payload.content = args.content;
+        if (args.targetAccounts !== undefined) payload.targetAccounts = args.targetAccounts;
         if (args.platforms !== undefined) payload.platforms = args.platforms;
         if (args.scheduleDate !== undefined) payload.scheduleDate = args.scheduleDate;
         if (args.scheduleTime !== undefined) payload.scheduleTime = args.scheduleTime;
+        if (args.timezone !== undefined) payload.timezone = args.timezone;
         if (args.status !== undefined) payload.status = args.status;
 
         const result = await callBackend(`/post/${args.id}`, "PUT", payload);
