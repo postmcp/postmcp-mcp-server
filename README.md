@@ -15,7 +15,7 @@ Supported platforms include **LinkedIn**, **X (Twitter)**, **Facebook**, **Insta
 - 🤖 **15 Built-in Tools**: Workspaces, connected accounts and their token health, brand kits, the post queue, pre-flight checks, create/schedule/reschedule/publish/retry/delete, and image generation.
 - ⚡ **Dual Transport Modes**: Native **Stdio mode** (for local desktop apps & IDEs) and **Streamable HTTP mode** (for web services, Claude.ai, and remote connectors).
 - 🔑 **Flexible Authentication**: Auto-detects API key from environment variables (`POSTMCPAI_API_KEY`), URL query parameters (`?apikey=YOUR_KEY`), or HTTP authorization headers (`x-api-key`, `Bearer token`).
-- 🗂️ **Multi-Workspace Aware**: Every tool takes an optional `workspaceId`, also settable per connection (`?projectId=...`, `x-project-id`) or per process (`POSTMCPAI_PROJECT_ID`).
+- 🗂️ **Multi-Workspace Aware**: The API key carries its own workspace, so a bare key is enough. To act on another one, every tool takes an optional `workspaceId`, also settable per connection (`?projectId=...`, `x-project-id`) or per process (`POSTMCPAI_PROJECT_ID`).
 - 🤖 **ChatGPT Actions Compatible**: Includes built-in OpenAPI 3.0 specification generator (`/openapi.json`) and REST endpoints (`/api/tools/:name`) for ChatGPT Custom GPT integration.
 - 🔒 **OAuth 2.0 & RFC 9728 Support**: Advertises PKCE authorization server metadata for seamless dynamic client registration with Claude.ai.
 
@@ -56,7 +56,7 @@ mcp-server/
 | :--- | :--- | :--- |
 | `POSTMCPAI_API_KEY` | **Required.** Your secret API key from the PostMCP AI dashboard. | `None` |
 | `POSTMCPAI_API_URL` | The API root URL of your PostMCP AI backend service. | `http://localhost:5023` |
-| `POSTMCPAI_PROJECT_ID` | Default workspace every tool call acts on. Overridden by a call's `workspaceId`. | First workspace the user owns |
+| `POSTMCPAI_PROJECT_ID` | Optional. Overrides the workspace the API key is bound to. Overridden in turn by a call's `workspaceId`. | The workspace the API key was issued from |
 | `PORT` | Setting this launches the server in **Remote Streamable HTTP Mode**. | `None` (Defaults to Stdio Mode) |
 
 ---
@@ -156,7 +156,7 @@ npm run start:sse
 1. Provide your public MCP URL with your API key attached:
    `https://your-hosted-domain.com/mcp?apikey=pmcp_sec_your_secret_api_key_here`
 2. Claude.ai will discover tool capabilities via `/mcp` and authenticate seamlessly.
-3. To pin the connection to one workspace, append `&projectId=YOUR_WORKSPACE_ID` (or send an `x-project-id` header). Individual tool calls can still override it with `workspaceId`.
+3. That URL is all you need: the key is bound to the workspace it was issued from, so tools act on that workspace without being told. To point the same key at a *different* workspace, append `&projectId=YOUR_WORKSPACE_ID` (or send an `x-project-id` header); individual tool calls can still override either with `workspaceId`.
 
 ---
 

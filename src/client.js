@@ -34,12 +34,12 @@ export const extractApiKey = (req) => {
 };
 
 /**
- * Extracts the workspace (project) id a request wants to act on.
+ * Extracts the workspace (project) id a request wants to act on, if it named one.
  *
- * An API key authenticates a person, not a workspace, and most people on a paid
- * plan have more than one. Without this the backend silently falls back to the
- * first workspace the caller owns, which is how a post meant for a client's
- * workspace ends up on the agency's own accounts.
+ * Optional by design: a key is bound to the workspace it was issued from, so
+ * the backend resolves one from the key alone and a connection URL is just the
+ * key. This is the override - it is how someone on several workspaces points a
+ * single key at a different one, and it still wins over the key's own binding.
  *
  * @param {import("express").Request} req - Express request object
  * @returns {string|null} The extracted workspace id or null if not specified
@@ -83,7 +83,7 @@ export const getApiConfig = (customApiKey = null) => {
  * @param {string} [method="GET"] - HTTP method
  * @param {object|null} [body=null] - Request body object
  * @param {string|null} [customApiKey=null] - Optional API key override
- * @param {string|null} [projectId=null] - Workspace to act on; omit for the caller's default
+ * @param {string|null} [projectId=null] - Workspace to act on; omit to use the one the key is bound to
  * @returns {Promise<any>} Response JSON data
  */
 export const makeBackendRequest = async (
@@ -103,9 +103,9 @@ export const makeBackendRequest = async (
     },
   };
 
-  // Every project-scoped backend route reads this header; sending it empty
-  // would resolve to a workspace named "" rather than falling back, so it is
-  // only attached when a workspace was actually chosen.
+  // Only sent when a workspace was actually chosen. Left off, the backend uses
+  // the workspace the API key is bound to, which is the normal case; sending it
+  // empty would resolve to a workspace named "" rather than falling back.
   const workspaceId = projectId || config.projectId;
   if (workspaceId) {
     options.headers["x-project-id"] = String(workspaceId);
