@@ -1,7 +1,7 @@
 import express from "express";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { randomUUID } from "node:crypto";
-import { extractApiKey } from "../client.js";
+import { extractApiKey, extractProjectId } from "../client.js";
 import { createServer } from "../server.js";
 
 const router = express.Router();
@@ -12,6 +12,7 @@ const transports = new Map();
 router.post("/mcp", express.json(), async (req, res) => {
   const sessionId = req.headers["mcp-session-id"];
   const requestApiKey = extractApiKey(req);
+  const requestProjectId = extractProjectId(req);
   let sessionObj;
 
   try {
@@ -21,9 +22,13 @@ router.post("/mcp", express.json(), async (req, res) => {
       if (requestApiKey && !sessionObj.apiKey) {
         sessionObj.apiKey = requestApiKey;
       }
+      if (requestProjectId && !sessionObj.projectId) {
+        sessionObj.projectId = requestProjectId;
+      }
     } else if (!sessionId && req.body?.method === "initialize") {
       // Brand new session
       const sessionApiKey = requestApiKey;
+      const sessionProjectId = requestProjectId;
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: () => randomUUID(),
         onsessioninitialized: (newSessionId) => {
@@ -35,6 +40,7 @@ router.post("/mcp", express.json(), async (req, res) => {
       sessionObj = {
         transport,
         apiKey: sessionApiKey,
+        projectId: sessionProjectId,
       };
 
       transport.onclose = () => {
@@ -44,7 +50,10 @@ router.post("/mcp", express.json(), async (req, res) => {
         }
       };
 
-      const server = createServer(() => sessionObj.apiKey);
+      const server = createServer(
+        () => sessionObj.apiKey,
+        () => sessionObj.projectId
+      );
       await server.connect(transport);
     } else {
       console.error(`[PostMCP MCP]: Rejected request. sessionId=${sessionId} method=${req.body?.method}`);
@@ -72,6 +81,7 @@ router.post("/mcp", express.json(), async (req, res) => {
 router.get("/mcp", async (req, res) => {
   const sessionId = req.headers["mcp-session-id"];
   const requestApiKey = extractApiKey(req);
+  const requestProjectId = extractProjectId(req);
 
   if (!sessionId || !transports.has(sessionId)) {
     res.status(400).send("Invalid or missing session ID");
@@ -81,6 +91,9 @@ router.get("/mcp", async (req, res) => {
   const sessionObj = transports.get(sessionId);
   if (requestApiKey && !sessionObj.apiKey) {
     sessionObj.apiKey = requestApiKey;
+  }
+  if (requestProjectId && !sessionObj.projectId) {
+    sessionObj.projectId = requestProjectId;
   }
 
   await sessionObj.transport.handleRequest(req, res);

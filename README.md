@@ -12,9 +12,10 @@ Supported platforms include **LinkedIn**, **X (Twitter)**, **Facebook**, **Insta
 
 ## 🚀 Features & Capabilities
 
-- 🤖 **7 Built-in Tools**: Retrieve user profiles, list connected accounts, view post queues, create/schedule posts, publish immediately, edit posts, and delete scheduled posts.
+- 🤖 **15 Built-in Tools**: Workspaces, connected accounts and their token health, brand kits, the post queue, pre-flight checks, create/schedule/reschedule/publish/retry/delete, and image generation.
 - ⚡ **Dual Transport Modes**: Native **Stdio mode** (for local desktop apps & IDEs) and **Streamable HTTP mode** (for web services, Claude.ai, and remote connectors).
 - 🔑 **Flexible Authentication**: Auto-detects API key from environment variables (`POSTMCPAI_API_KEY`), URL query parameters (`?apikey=YOUR_KEY`), or HTTP authorization headers (`x-api-key`, `Bearer token`).
+- 🗂️ **Multi-Workspace Aware**: Every tool takes an optional `workspaceId`, also settable per connection (`?projectId=...`, `x-project-id`) or per process (`POSTMCPAI_PROJECT_ID`).
 - 🤖 **ChatGPT Actions Compatible**: Includes built-in OpenAPI 3.0 specification generator (`/openapi.json`) and REST endpoints (`/api/tools/:name`) for ChatGPT Custom GPT integration.
 - 🔒 **OAuth 2.0 & RFC 9728 Support**: Advertises PKCE authorization server metadata for seamless dynamic client registration with Claude.ai.
 
@@ -28,7 +29,8 @@ mcp-server/
 │   └── cli.js            # Executable CLI entry point (Stdio / HTTP mode runner)
 ├── src/
 │   ├── config.js         # Centralized configuration & environment loader
-│   ├── client.js         # Backend API client & API key extraction logic
+│   ├── client.js         # Backend API client, API key & workspace extraction
+│   ├── platforms.js      # Platform limits, credit pricing & post cost helper
 │   ├── tools/
 │   │   ├── definitions.js# MCP tool JSON schemas & parameter specifications
 │   │   ├── handlers.js   # MCP tool execution handlers
@@ -54,21 +56,45 @@ mcp-server/
 | :--- | :--- | :--- |
 | `POSTMCPAI_API_KEY` | **Required.** Your secret API key from the PostMCP AI dashboard. | `None` |
 | `POSTMCPAI_API_URL` | The API root URL of your PostMCP AI backend service. | `http://localhost:5023` |
+| `POSTMCPAI_PROJECT_ID` | Default workspace every tool call acts on. Overridden by a call's `workspaceId`. | First workspace the user owns |
 | `PORT` | Setting this launches the server in **Remote Streamable HTTP Mode**. | `None` (Defaults to Stdio Mode) |
 
 ---
 
 ## 🛠️ MCP Tools Reference
 
-| Tool Name | Description | Required Parameters | Optional Parameters |
+Every tool below also accepts an optional `workspaceId` (from `list_workspaces`) to act on a specific workspace.
+
+### Reading
+
+| Tool Name | Description | Required | Optional |
 | :--- | :--- | :--- | :--- |
-| `get_user_info` | Retrieve authenticated user profile, tier, credit balance, and AI tokens remaining. | None | None |
-| `get_connected_accounts` | List active, synced social channels (LinkedIn, Twitter, Facebook, Instagram, Threads, Bluesky). | None | None |
-| `list_posts` | Retrieve all scheduled, published, draft, and failed social media posts. | None | None |
-| `create_post` | Draft, schedule, or immediately publish a post to target platforms. | `content`, `platforms` | `publishImmediately`, `scheduleDate`, `scheduleTime`, `mediaUrl` |
-| `publish_post_now` | Broadcast an existing scheduled post immediately. | `id` | None |
-| `delete_post` | Cancel and delete an existing scheduled post. | `id` | None |
-| `update_post` | Update content, platforms, schedule date/time, or status of an existing post. | `id` | `content`, `platforms`, `scheduleDate`, `scheduleTime`, `status` |
+| `get_user_info` | Authenticated user: plan, credit balance, AI tokens, active workspace and role. | — | `workspaceId` |
+| `list_workspaces` | Every workspace the user belongs to, with ids, roles, and connected platforms. | — | — |
+| `get_connected_accounts` | Connected social profiles with the `profileId` needed to target them. | — | `workspaceId` |
+| `get_account_health` | Connections whose token expired or is close to it and need reconnecting. | — | `workspaceId` |
+| `list_brandings` | Brand kits: tone, audience, keywords, style images. | — | `workspaceId` |
+| `list_posts` | Post queue, newest first, with per-profile delivery status, pagination and counts. | — | `status`, `page`, `limit`, `all` |
+| `get_post` | One post in full: which profiles received it, live URLs, and per-profile errors. | `id` | — |
+
+### Writing
+
+| Tool Name | Description | Required | Optional |
+| :--- | :--- | :--- | :--- |
+| `preflight_post` | Dry run: character limits, unconnected profiles, missing media, credit cost. Publishes nothing. | `content` | `targetAccounts`, `platforms`, `mediaUrl` |
+| `create_post` | Draft, schedule, or immediately publish a post to named profiles. | `content` | `targetAccounts`, `platforms`, `publishImmediately`, `scheduleDate`, `scheduleTime`, `timezone`, `mediaUrl` |
+| `publish_post_now` | Publish an existing post immediately; also retries a failed post, skipping delivered profiles. | `id` | — |
+| `update_post` | Update content, target profiles, schedule, media, or status. | `id` | `content`, `targetAccounts`, `platforms`, `scheduleDate`, `scheduleTime`, `timezone`, `mediaUrl`, `status` |
+| `reschedule_post` | Move a post to a new slot, keeping copy and targets. Re-arms failed and draft posts. | `id`, `scheduleDate`, `scheduleTime` | `timezone` |
+| `reset_stuck_post` | Release a post stuck mid-publish so it can be retried. Delivered profiles keep their state. | `id` | `force` |
+| `delete_post` | Cancel and delete a scheduled or failed post. | `id` | — |
+| `generate_image` | Generate a post image and return its hosted URL for `mediaUrl`. Spends AI tokens. | `prompt` | `brandingId`, `styleImageUrl` |
+
+### Notes for clients
+
+- **Target profiles, not platforms.** `targetAccounts` sends only to the profiles named; `platforms` fans out to every connected profile on each platform.
+- **Always pass `timezone`** when a wall-clock time matters. The backend defaults to UTC, so a 9:00 IST post scheduled without a zone goes out at 14:30 IST.
+- **Credits** are charged per profile delivered to (X/Twitter costs 5, others 1), plus a one-off 50-credit surcharge when the copy contains a link. `preflight_post` reports this before you commit.
 
 ---
 
@@ -130,6 +156,7 @@ npm run start:sse
 1. Provide your public MCP URL with your API key attached:
    `https://your-hosted-domain.com/mcp?apikey=pmcp_sec_your_secret_api_key_here`
 2. Claude.ai will discover tool capabilities via `/mcp` and authenticate seamlessly.
+3. To pin the connection to one workspace, append `&projectId=YOUR_WORKSPACE_ID` (or send an `x-project-id` header). Individual tool calls can still override it with `workspaceId`.
 
 ---
 

@@ -19,7 +19,16 @@ export const createExpressApp = () => {
     cors({
       origin: true,
       exposedHeaders: ["Mcp-Session-Id"],
-      allowedHeaders: ["Content-Type", "Authorization", "Mcp-Session-Id", "mcp-protocol-version"],
+      allowedHeaders: [
+        "Content-Type",
+        "Authorization",
+        "Mcp-Session-Id",
+        "mcp-protocol-version",
+        // Both are read off the request by extractApiKey / extractProjectId, so
+        // a browser client that sends them must be allowed to.
+        "x-api-key",
+        "x-project-id",
+      ],
     })
   );
 

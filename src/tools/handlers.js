@@ -1,17 +1,135 @@
 import { makeBackendRequest } from "../client.js";
+import {
+  CHARACTER_LIMITS,
+  MEDIA_REQUIRED,
+  LINK_SURCHARGE_CREDITS,
+  calculatePostCredits,
+  containsLink,
+} from "../platforms.js";
+
+/** Wraps a value as a successful MCP tool result. */
+const ok = (data) => ({
+  content: [
+    {
+      type: "text",
+      text: typeof data === "string" ? data : JSON.stringify(data, null, 2),
+    },
+  ],
+});
+
+/** Wraps a message as a failed MCP tool result. */
+const fail = (message) => ({
+  isError: true,
+  content: [{ type: "text", text: message }],
+});
+
+/** Flattens the workspace's connectedAccounts map into one list of profiles. */
+const flattenAccounts = (connectedAccounts = {}) => {
+  const connected = [];
+  for (const [platform, accounts] of Object.entries(connectedAccounts || {})) {
+    if (!Array.isArray(accounts)) continue;
+    accounts.forEach((acc) => {
+      if (!acc?.connected) return;
+      connected.push({
+        platform,
+        username: acc.username,
+        name: acc.name,
+        profileId: acc.profileId,
+        isOrganization: acc.isOrganization || false,
+        needsReconnect: !!acc.needsReconnect,
+      });
+    });
+  }
+  return connected;
+};
+
+/** The post shape returned to callers - the fields an agent can act on. */
+const serializePost = (p) => ({
+  id: p._id,
+  content: p.content,
+  platforms: p.platforms,
+  // Per-profile delivery detail: which profile the post went to and how it fared.
+  targets: (p.targets || []).map((t) => ({
+    platform: t.platform,
+    profileId: t.profileId,
+    username: t.username,
+    status: t.status,
+    postId: t.postId,
+    url: t.url,
+    error: t.error,
+  })),
+  status: p.status,
+  scheduleDate: p.scheduleDate,
+  scheduleTime: p.scheduleTime,
+  timezone: p.timezone,
+  scheduledAt: p.scheduledAt,
+  mediaUrl: p.mediaUrl,
+  platformStatuses: p.platformStatuses,
+  attempts: p.attempts,
+  lastError: p.lastError,
+  createdAt: p.createdAt,
+});
+
+/**
+ * Resolves the profiles a post would reach, the same way the backend does:
+ * named profiles are matched against the workspace's connections, and a bare
+ * platform fans out to every connected profile on it.
+ */
+const resolveTargets = ({ targetAccounts = [], platforms = [], connected = [] }) => {
+  const targets = [];
+  const unknown = [];
+  const seen = new Set();
+
+  const add = (account) => {
+    const key = `${account.platform}:${account.profileId}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    targets.push(account);
+  };
+
+  (targetAccounts || []).forEach((ref) => {
+    const platform = String(ref?.platform || "").toLowerCase();
+    const id = ref?.profileId || ref?.userId;
+    const match = connected.find(
+      (acc) =>
+        acc.platform === platform &&
+        (!id || acc.profileId === String(id)) &&
+        (!ref?.username || !acc.username || acc.username === ref.username)
+    );
+    if (match) add(match);
+    else unknown.push(`${platform}:${id || ref?.username || "?"}`);
+  });
+
+  (platforms || []).forEach((name) => {
+    const platform = String(name || "").toLowerCase();
+    const matches = connected.filter((acc) => acc.platform === platform);
+    if (matches.length) matches.forEach(add);
+    else unknown.push(platform);
+  });
+
+  return { targets, unknown };
+};
 
 /**
  * Handles execution of an MCP tool call by name and arguments.
  *
  * @param {string} name - Name of the tool to execute
  * @param {object} args - Arguments passed to the tool
- * @param {Function} getApiKey - Function returning the API key to use for backend calls
+ * @param {Function|string} getApiKey - The API key, or a function returning it
+ * @param {Function|string} [getProjectId] - Default workspace id, or a function returning it
  * @returns {Promise<{ content: Array<{ type: string, text: string }>, isError?: boolean }>}
  */
-export const handleToolCall = async (name, args, getApiKey) => {
+export const handleToolCall = async (name, args, getApiKey, getProjectId = null) => {
+  const params = args || {};
+
+  // An explicit workspaceId on the call wins over the session/env default, so a
+  // single connection can drive several workspaces in one conversation.
+  const sessionProjectId = typeof getProjectId === "function" ? getProjectId() : getProjectId;
+  const projectId = params.workspaceId || sessionProjectId || null;
+
   const callBackend = (path, method = "GET", body = null) => {
     const apiKey = typeof getApiKey === "function" ? getApiKey() : getApiKey;
-    return makeBackendRequest(path, method, body, apiKey);
+    return makeBackendRequest(path, method, body, apiKey, projectId);
   };
 
   try {
@@ -24,164 +142,259 @@ export const handleToolCall = async (name, args, getApiKey) => {
           plan: data.plan,
           credits: data.credits,
           aiToken: data.aiToken,
+          activeWorkspace: data.activeProject
+            ? {
+                id: data.activeProject._id,
+                name: data.activeProject.name,
+                role: data.workspaceRole,
+                isOwner: data.isProjectOwner,
+              }
+            : null,
+          workspaceCount: Array.isArray(data.projects) ? data.projects.length : undefined,
         };
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(userInfo, null, 2),
-            },
-          ],
-        };
+        return ok(userInfo);
+      }
+
+      case "list_workspaces": {
+        const data = await callBackend("/project/list");
+        const projects = Array.isArray(data) ? data : data?.projects || [];
+        const list = projects.map((p) => ({
+          id: p._id || p.id,
+          name: p.name,
+          role: p.myRole || p.role,
+          isOwner: (p.myRole || p.role) === "owner",
+          connectedPlatforms: Object.entries(p.connectedAccounts || {})
+            .filter(([, accounts]) => Array.isArray(accounts) && accounts.some((a) => a?.connected))
+            .map(([platform]) => platform),
+          memberCount: Array.isArray(p.members) ? p.members.length : undefined,
+        }));
+        return ok(list);
       }
 
       case "get_connected_accounts": {
         const data = await callBackend("/auth/user-data");
-        const connected = [];
-        if (data.connectedAccounts) {
-          for (const [platform, accounts] of Object.entries(data.connectedAccounts)) {
-            if (Array.isArray(accounts)) {
-              accounts.forEach((acc) => {
-                if (acc.connected) {
-                  connected.push({
-                    platform,
-                    username: acc.username,
-                    name: acc.name,
-                    profileId: acc.profileId,
-                    isOrganization: acc.isOrganization || false,
-                  });
-                }
-              });
-            }
-          }
+        return ok(flattenAccounts(data.connectedAccounts));
+      }
+
+      case "get_account_health": {
+        const data = await callBackend("/auth/user-data");
+        const health = Array.isArray(data.accountHealth) ? data.accountHealth : [];
+        return ok({
+          // An empty list is the healthy case, which is easy to misread as "no
+          // data" - say so rather than returning a bare [].
+          healthy: health.length === 0,
+          message: health.length === 0
+            ? "Every connected profile has a valid token."
+            : `${health.length} connection(s) need attention before they are posted to.`,
+          connections: health,
+        });
+      }
+
+      case "list_brandings": {
+        const user = await callBackend("/auth/user-data");
+        const workspace = projectId || user.activeProject?._id;
+        if (!workspace) {
+          return fail("No workspace resolved for this user; cannot list brand kits.");
         }
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(connected, null, 2),
-            },
-          ],
-        };
+        const data = await callBackend(`/project/${workspace}/brandings`);
+        const brandings = Array.isArray(data) ? data : data?.brandings || [];
+        return ok(
+          brandings.map((b) => ({
+            id: b._id || b.id,
+            name: b.name,
+            description: b.description,
+            tone: b.tone,
+            audience: b.audience,
+            keywords: b.keywords,
+            styleImage: b.styleImage,
+            assets: (b.assets || []).map((a) => ({ url: a.url, name: a.name })),
+          }))
+        );
       }
 
       case "list_posts": {
+        const query = new URLSearchParams();
+        if (params.status && params.status !== "all") query.set("status", params.status);
+        if (params.page) query.set("page", String(params.page));
+        if (params.limit) query.set("limit", String(params.limit));
+        if (params.all) query.set("all", "true");
+        const suffix = query.toString() ? `?${query.toString()}` : "";
+
         // /post/list answers with { posts, pagination, counts }; older builds
         // answered with a bare array.
-        const data = await callBackend("/post/list");
+        const data = await callBackend(`/post/list${suffix}`);
         const posts = Array.isArray(data) ? data : data?.posts || [];
-        const list = posts.map((p) => ({
-          id: p._id,
-          content: p.content,
-          platforms: p.platforms,
-          // Per-profile delivery detail: which profile the post went to and how it fared.
-          targets: (p.targets || []).map((t) => ({
+        return ok({
+          posts: posts.map(serializePost),
+          pagination: Array.isArray(data) ? undefined : data?.pagination,
+          counts: Array.isArray(data) ? undefined : data?.counts,
+        });
+      }
+
+      case "get_post": {
+        // There is no single-post endpoint; the list is the source of truth, so
+        // ask for all of them and pick the one requested.
+        const data = await callBackend("/post/list?all=true");
+        const posts = Array.isArray(data) ? data : data?.posts || [];
+        const post = posts.find((p) => String(p._id) === String(params.id));
+        if (!post) {
+          return fail(
+            `Post '${params.id}' was not found in this workspace. Check the id with list_posts, or pass the workspaceId it belongs to.`
+          );
+        }
+        return ok(serializePost(post));
+      }
+
+      case "preflight_post": {
+        const data = await callBackend("/auth/user-data");
+        const connected = flattenAccounts(data.connectedAccounts);
+        const { targets, unknown } = resolveTargets({
+          targetAccounts: params.targetAccounts,
+          platforms: params.platforms,
+          connected,
+        });
+
+        const content = params.content || "";
+        const length = content.length;
+        const platformsHit = [...new Set(targets.map((t) => t.platform))];
+
+        const tooLong = platformsHit
+          .filter((platform) => CHARACTER_LIMITS[platform] && length > CHARACTER_LIMITS[platform])
+          .map((platform) => ({
+            platform,
+            limit: CHARACTER_LIMITS[platform],
+            over: length - CHARACTER_LIMITS[platform],
+          }));
+
+        const missingMedia = params.mediaUrl
+          ? []
+          : platformsHit.filter((platform) => MEDIA_REQUIRED.includes(platform));
+
+        const stale = targets.filter((t) => t.needsReconnect).map((t) => `${t.platform}:${t.username || t.profileId}`);
+
+        const credits = calculatePostCredits(content, targets);
+        const balance = data.credits ?? 0;
+
+        const blockers = [];
+        if (!targets.length) {
+          blockers.push(
+            unknown.length
+              ? `None of the requested profiles are connected: ${unknown.join(", ")}`
+              : "No target profiles given. Pass targetAccounts or platforms."
+          );
+        }
+        tooLong.forEach((t) =>
+          blockers.push(`Copy is ${t.over} character(s) over ${t.platform}'s ${t.limit}-character limit.`)
+        );
+        missingMedia.forEach((platform) => blockers.push(`${platform} will not accept a post without media.`));
+        if (credits > balance) {
+          blockers.push(`Costs ${credits} credits but the workspace has ${balance}.`);
+        }
+
+        const warnings = [];
+        if (unknown.length && targets.length) {
+          warnings.push(`Ignored, not connected: ${unknown.join(", ")}`);
+        }
+        stale.forEach((t) => warnings.push(`${t} needs reconnecting and will likely fail at publish time.`));
+        if (containsLink(content)) {
+          warnings.push(`Copy contains a link, which adds a one-off ${LINK_SURCHARGE_CREDITS}-credit surcharge.`);
+        }
+
+        return ok({
+          ok: blockers.length === 0,
+          characterCount: length,
+          resolvedTargets: targets.map((t) => ({
             platform: t.platform,
             profileId: t.profileId,
             username: t.username,
-            status: t.status,
-            postId: t.postId,
-            error: t.error,
           })),
-          status: p.status,
-          scheduleDate: p.scheduleDate,
-          scheduleTime: p.scheduleTime,
-          mediaUrl: p.mediaUrl,
-          platformStatuses: p.platformStatuses,
-          createdAt: p.createdAt,
-        }));
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(list, null, 2),
-            },
-          ],
-        };
+          unknownTargets: unknown,
+          limits: Object.fromEntries(platformsHit.map((p) => [p, CHARACTER_LIMITS[p]])),
+          credits: { cost: credits, balance, remainingAfter: balance - credits },
+          blockers,
+          warnings,
+        });
       }
 
       case "create_post": {
         const payload = {
-          content: args.content,
-          platforms: args.platforms,
-          targetAccounts: args.targetAccounts,
-          publishImmediately: args.publishImmediately ?? false,
-          scheduleDate: args.scheduleDate || "",
-          scheduleTime: args.scheduleTime || "",
+          content: params.content,
+          platforms: params.platforms,
+          targetAccounts: params.targetAccounts,
+          publishImmediately: params.publishImmediately ?? false,
+          scheduleDate: params.scheduleDate || "",
+          scheduleTime: params.scheduleTime || "",
           // The wall-clock slot above means nothing without the zone it was
           // picked in; the backend resolves the two into a firing instant.
-          timezone: args.timezone || "",
-          mediaUrl: args.mediaUrl || "",
-          imageData: args.imageData || null,
+          timezone: params.timezone || "",
+          mediaUrl: params.mediaUrl || "",
+          imageData: params.imageData || null,
         };
         const result = await callBackend("/post/create", "POST", payload);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
-        };
+        return ok(result);
       }
 
       case "publish_post_now": {
-        const result = await callBackend(`/post/${args.id}/publish-now`, "POST");
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
-        };
+        const result = await callBackend(`/post/${params.id}/publish-now`, "POST");
+        return ok(result);
       }
 
       case "delete_post": {
-        const result = await callBackend(`/post/${args.id}`, "DELETE");
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
-        };
+        const result = await callBackend(`/post/${params.id}`, "DELETE");
+        return ok(result);
       }
 
       case "update_post": {
         const payload = {};
-        if (args.content !== undefined) payload.content = args.content;
-        if (args.targetAccounts !== undefined) payload.targetAccounts = args.targetAccounts;
-        if (args.platforms !== undefined) payload.platforms = args.platforms;
-        if (args.scheduleDate !== undefined) payload.scheduleDate = args.scheduleDate;
-        if (args.scheduleTime !== undefined) payload.scheduleTime = args.scheduleTime;
-        if (args.timezone !== undefined) payload.timezone = args.timezone;
-        if (args.status !== undefined) payload.status = args.status;
+        if (params.content !== undefined) payload.content = params.content;
+        if (params.targetAccounts !== undefined) payload.targetAccounts = params.targetAccounts;
+        if (params.platforms !== undefined) payload.platforms = params.platforms;
+        if (params.scheduleDate !== undefined) payload.scheduleDate = params.scheduleDate;
+        if (params.scheduleTime !== undefined) payload.scheduleTime = params.scheduleTime;
+        if (params.timezone !== undefined) payload.timezone = params.timezone;
+        if (params.mediaUrl !== undefined) payload.mediaUrl = params.mediaUrl;
+        if (params.status !== undefined) payload.status = params.status;
 
-        const result = await callBackend(`/post/${args.id}`, "PUT", payload);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
+        const result = await callBackend(`/post/${params.id}`, "PUT", payload);
+        return ok(result);
+      }
+
+      case "reschedule_post": {
+        const payload = {
+          scheduleDate: params.scheduleDate,
+          scheduleTime: params.scheduleTime,
         };
+        // Omitted rather than empty: the backend reads "no timezone" as "keep
+        // the post's own zone", and an empty string is not that.
+        if (params.timezone) payload.timezone = params.timezone;
+
+        const result = await callBackend(`/post/${params.id}/reschedule`, "PATCH", payload);
+        return ok(result);
+      }
+
+      case "reset_stuck_post": {
+        const result = await callBackend(`/post/${params.id}/reset`, "POST", {
+          force: params.force ?? false,
+        });
+        return ok(result);
+      }
+
+      case "generate_image": {
+        const payload = { prompt: params.prompt };
+        if (params.brandingId) payload.brandingId = params.brandingId;
+        if (params.styleImageUrl) payload.styleImageUrl = params.styleImageUrl;
+
+        const result = await callBackend("/agent/generate-image", "POST", payload);
+        return ok({
+          mediaUrl: result.mediaUrl || result.imageUrl,
+          hint: "Pass this as mediaUrl to create_post or update_post to attach it.",
+        });
       }
 
       default:
         throw new Error(`Tool not found: ${name}`);
     }
   } catch (error) {
-    return {
-      isError: true,
-      content: [
-        {
-          type: "text",
-          text: `Error executing tool '${name}': ${error.message}`,
-        },
-      ],
-    };
+    return fail(`Error executing tool '${name}': ${error.message}`);
   }
 };
