@@ -19,7 +19,8 @@
     "start": "node index.js",
     "start:sse": "PORT=3000 node index.js",
     "start:stdio": "node index.js",
-    "dev": "PORT=3000 node --watch index.js"
+    "dev": "PORT=3000 node --watch index.js",
+    "test": "node --test 'test/*.test.js'"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

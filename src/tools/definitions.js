@@ -86,7 +86,7 @@ export const toolDefinitions = [
   {
     name: "list_posts",
     description:
-      "Retrieve scheduled, published, draft, and failed posts, newest first, with per-profile delivery status. Returns pagination plus counts per status.",
+      "Retrieve scheduled, published, draft, and failed posts, newest first, with per-profile delivery status. Every profile that received a post carries `url`, the link to the live copy - give the user that link when they ask where a post went. Returns pagination plus counts per status.",
     inputSchema: {
       type: "object",
       properties: {
@@ -160,7 +160,7 @@ export const toolDefinitions = [
   {
     name: "create_post",
     description:
-      "Schedule or immediately publish a post to specific connected social profiles. Prefer targetAccounts so the post lands only on the profiles you name. Every targeted profile becomes its own post with its own id, so each can be edited, retried or cancelled on its own - the response lists them all.",
+      "Schedule or immediately publish a post to specific connected social profiles. Prefer targetAccounts so the post lands only on the profiles you name. Every targeted profile becomes its own post with its own id, so each can be edited, retried or cancelled on its own - the response lists them all. With publishImmediately, each delivered profile comes back with a `url` to the live copy; pass those on to the user.",
     inputSchema: {
       type: "object",
       properties: {
@@ -220,7 +220,7 @@ export const toolDefinitions = [
   {
     name: "publish_post_now",
     description:
-      "Broadcast an existing scheduled post immediately to its platforms. Also the way to retry a failed post: profiles that already received it are skipped, so only the stragglers go out.",
+      "Broadcast an existing scheduled post immediately to its platforms. Also the way to retry a failed post: profiles that already received it are skipped, so only the stragglers go out. The returned post carries a `url` per delivered profile - report those links rather than only saying it published.",
     inputSchema: {
       type: "object",
       properties: {

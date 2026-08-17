@@ -405,12 +405,27 @@ export const handleToolCall = async (name, args, getApiKey, getProjectId = null)
           imageData: params.imageData || null,
         };
         const result = await callBackend("/post/create", "POST", payload);
-        return ok(result);
+        // One post per targeted profile comes back. Serializing them keeps the
+        // response the same shape as list_posts - and, after an immediate
+        // publish, carries the link to each live copy.
+        const created = Array.isArray(result?.posts)
+          ? result.posts
+          : [result?.post].filter(Boolean);
+        return ok({
+          ...result,
+          ...(created.length ? { posts: created.map(serializePost), post: serializePost(created[0]) } : {}),
+        });
       }
 
       case "publish_post_now": {
         const result = await callBackend(`/post/${params.id}/publish-now`, "POST");
-        return ok(result);
+        // Serialized like list_posts and get_post, so the per-profile outcome
+        // and the link to each live copy come back in the shape callers
+        // already read.
+        return ok({
+          message: result?.message,
+          post: result?.post ? serializePost(result.post) : result,
+        });
       }
 
       case "delete_post": {
