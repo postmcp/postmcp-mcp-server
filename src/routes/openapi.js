@@ -73,7 +73,14 @@ router.post("/api/tools/:name", express.json(), async (req, res) => {
   const text = result?.content?.[0]?.text ?? "";
 
   if (result?.isError) {
-    return res.status(500).json({ error: text });
+    // A failure can carry structure - multicall reports which call in the
+    // batch failed - so it is handed back as JSON rather than as a string
+    // holding JSON that the caller has to parse a second time.
+    try {
+      return res.status(500).json({ error: JSON.parse(text) });
+    } catch (_) {
+      return res.status(500).json({ error: text });
+    }
   }
 
   try {

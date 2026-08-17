@@ -82,7 +82,7 @@ Every tool below also accepts an optional `workspaceId` (from `list_workspaces`)
 | Tool Name | Description | Required | Optional |
 | :--- | :--- | :--- | :--- |
 | `preflight_post` | Dry run: character limits, unconnected profiles, missing media, credit cost. Publishes nothing. | `content` | `targetAccounts`, `platforms`, `mediaUrl` |
-| `create_post` | Draft, schedule, or immediately publish a post to named profiles. | `content` | `targetAccounts`, `platforms`, `publishImmediately`, `scheduleDate`, `scheduleTime`, `timezone`, `mediaUrl` |
+| `create_post` | Draft, schedule, or immediately publish a post to named profiles. Each profile becomes its own post with its own id. | `content` | `targetAccounts`, `variants`, `platforms`, `publishImmediately`, `scheduleDate`, `scheduleTime`, `timezone`, `mediaUrl` |
 | `publish_post_now` | Publish an existing post immediately; also retries a failed post, skipping delivered profiles. | `id` | — |
 | `update_post` | Update content, target profiles, schedule, media, or status. | `id` | `content`, `targetAccounts`, `platforms`, `scheduleDate`, `scheduleTime`, `timezone`, `mediaUrl`, `status` |
 | `reschedule_post` | Move a post to a new slot, keeping copy and targets. Re-arms failed and draft posts. | `id`, `scheduleDate`, `scheduleTime` | `timezone` |
@@ -90,9 +90,40 @@ Every tool below also accepts an optional `workspaceId` (from `list_workspaces`)
 | `delete_post` | Cancel and delete a scheduled or failed post. | `id` | — |
 | `generate_image` | Generate a post image and return its hosted URL for `mediaUrl`. Spends AI tokens. | `prompt` | `brandingId`, `styleImageUrl` |
 
+### Batching
+
+| Tool Name | Description | Required | Optional |
+| :--- | :--- | :--- | :--- |
+| `multicall` | Run up to 20 of the tools above in one request, in order. Tool names are validated before anything executes, so a typo cannot leave half a batch written. Cannot nest. | `calls` | `stopOnError`, `workspaceId` |
+
+```json
+{
+  "calls": [
+    { "id": "img", "tool": "generate_image", "arguments": { "prompt": "launch banner" } },
+    {
+      "tool": "create_post",
+      "arguments": {
+        "content": "We shipped it 🚀",
+        "targetAccounts": [
+          { "platform": "linkedin", "profileId": "lin_7741903" },
+          { "platform": "twitter", "profileId": "tw_1293847", "content": "We shipped it 🚀" }
+        ],
+        "scheduleDate": "2026-09-01",
+        "scheduleTime": "10:00",
+        "timezone": "Asia/Kolkata"
+      }
+    }
+  ],
+  "stopOnError": true
+}
+```
+
+The reply carries one entry per call — `{ id, tool, ok, result }` or `{ id, tool, ok: false, error }` — plus counts and, when a failure stopped the batch, the calls that were skipped.
+
 ### Notes for clients
 
 - **Target profiles, not platforms.** `targetAccounts` sends only to the profiles named; `platforms` fans out to every connected profile on each platform.
+- **One post per profile.** `create_post` stores a separate post per targeted profile, so each can be edited, retried or cancelled on its own. Give per-profile copy through `targetAccounts[].content` or the `variants` map.
 - **Always pass `timezone`** when a wall-clock time matters. The backend defaults to UTC, so a 9:00 IST post scheduled without a zone goes out at 14:30 IST.
 - **Credits** are charged per profile delivered to (X/Twitter costs 5, others 1), plus a one-off 50-credit surcharge when the copy contains a link. `preflight_post` reports this before you commit.
 

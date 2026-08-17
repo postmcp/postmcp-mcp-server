@@ -23,6 +23,15 @@ const targetAccountItem = (extra = "") => ({
     profileId: { type: "string" },
     userId: { type: "string" },
     username: { type: "string" },
+    content: {
+      type: "string",
+      description:
+        "Copy for this profile only, overriding the shared content. Use it to write natively for each platform - a 280-character post for X, a longer one for LinkedIn.",
+    },
+    mediaUrl: {
+      type: "string",
+      description: "Media for this profile only, overriding the shared mediaUrl.",
+    },
   },
   required: ["platform"],
   description: extra || undefined,
@@ -151,13 +160,20 @@ export const toolDefinitions = [
   {
     name: "create_post",
     description:
-      "Schedule or immediately publish a post to specific connected social profiles. Prefer targetAccounts so the post lands only on the profiles you name.",
+      "Schedule or immediately publish a post to specific connected social profiles. Prefer targetAccounts so the post lands only on the profiles you name. Every targeted profile becomes its own post with its own id, so each can be edited, retried or cancelled on its own - the response lists them all.",
     inputSchema: {
       type: "object",
       properties: {
         content: {
           type: "string",
-          description: "The text body / commentary of the post.",
+          description:
+            "The text body / commentary of the post. Used for any profile that does not carry its own content.",
+        },
+        variants: {
+          type: "object",
+          description:
+            "Per-platform copy, keyed by platform name (or \"platform:profileId\" for one profile), e.g. { \"twitter\": \"short punchy version\", \"linkedin\": \"longer version\" }. Overrides content for those destinations.",
+          additionalProperties: { type: "string" },
         },
         targetAccounts: {
           type: "array",
@@ -360,6 +376,47 @@ export const toolDefinitions = [
         workspaceId,
       },
       required: ["prompt"],
+    },
+  },
+  {
+    name: "multicall",
+    description:
+      "Run several PostMCP tools in one request, in the order given. Use it whenever a task needs more than one call - scheduling a week of posts, checking accounts then publishing, or cancelling a handful of posts - instead of one round trip per call. Calls run sequentially and every tool name is validated before anything executes, so a typo cannot leave half a batch written. Cannot nest: a call inside a batch may not itself be multicall.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        calls: {
+          type: "array",
+          description: "The calls to run, in order. Between 1 and 20.",
+          minItems: 1,
+          maxItems: 20,
+          items: {
+            type: "object",
+            properties: {
+              tool: {
+                type: "string",
+                description: "Name of the tool to run, e.g. \"create_post\".",
+              },
+              arguments: {
+                type: "object",
+                description: "Arguments for that tool, exactly as if it were called on its own.",
+              },
+              id: {
+                type: "string",
+                description: "Optional label echoed back on this call's result, for matching results to calls.",
+              },
+            },
+            required: ["tool"],
+          },
+        },
+        stopOnError: {
+          type: "boolean",
+          description:
+            "Stop the batch at the first failing call and skip the rest (default true). Set false to attempt every call regardless - right for independent work like cancelling several posts, wrong when a later call depends on an earlier one.",
+        },
+        workspaceId,
+      },
+      required: ["calls"],
     },
   },
 ];

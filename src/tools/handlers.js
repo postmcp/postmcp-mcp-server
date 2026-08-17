@@ -1,4 +1,5 @@
 import { makeBackendRequest } from "../client.js";
+import { toolDefinitions } from "./definitions.js";
 import {
   CHARACTER_LIMITS,
   MEDIA_REQUIRED,
@@ -6,6 +7,15 @@ import {
   calculatePostCredits,
   containsLink,
 } from "../platforms.js";
+
+/**
+ * How many calls one multicall batch may carry.
+ *
+ * Bounded because a batch is a single request that can write a post per entry:
+ * an unbounded one is a way to spend a workspace's whole credit balance, or to
+ * hold a connection open indefinitely, in one call.
+ */
+const MULTICALL_LIMIT = 20;
 
 /** Wraps a value as a successful MCP tool result. */
 const ok = (data) => ({
@@ -108,6 +118,67 @@ const resolveTargets = ({ targetAccounts = [], platforms = [], connected = [] })
   });
 
   return { targets, unknown };
+};
+
+/**
+ * Reads one tool result back into plain data.
+ *
+ * Tool results travel as text so they can be shown in a chat transcript. Inside
+ * a batch they are data again - a caller reading `results[2].result.id` should
+ * not have to parse a string out of a string.
+ */
+const readResult = (result) => {
+  const text = result?.content?.[0]?.text ?? "";
+  try {
+    return JSON.parse(text);
+  } catch (_) {
+    return text;
+  }
+};
+
+/** Tool names this server will actually dispatch. */
+const KNOWN_TOOLS = new Set(toolDefinitions.map((tool) => tool.name));
+
+/** What a batch may contain - itself excluded, since batches cannot nest. */
+const BATCHABLE_TOOLS = [...KNOWN_TOOLS].filter((name) => name !== "multicall");
+
+/**
+ * Checks a whole batch before any of it runs.
+ *
+ * Half-executed batches are the failure that matters here: calls 1-4 have
+ * already scheduled posts by the time call 5 turns out to be a typo, and there
+ * is no rollback. Names are therefore validated up front, and the batch is
+ * refused as a whole.
+ *
+ * @returns {string|null} The reason the batch cannot run, or null if it can.
+ */
+const validateBatch = (calls) => {
+  if (!Array.isArray(calls) || calls.length === 0) {
+    return "multicall needs a non-empty `calls` array, each entry naming a tool and its arguments.";
+  }
+  if (calls.length > MULTICALL_LIMIT) {
+    return `multicall accepts at most ${MULTICALL_LIMIT} calls at a time; ${calls.length} were given. Split the work into smaller batches.`;
+  }
+
+  for (let i = 0; i < calls.length; i++) {
+    const name = calls[i]?.tool || calls[i]?.name;
+    const position = `Call ${i + 1}`;
+
+    if (!name) {
+      return `${position} has no \`tool\` name. Every entry needs the name of the tool to run.`;
+    }
+    if (name === "multicall") {
+      return `${position} is itself a multicall. Batches cannot nest - list the calls directly instead.`;
+    }
+    if (!KNOWN_TOOLS.has(name)) {
+      return `${position} names an unknown tool '${name}'. Nothing was run. Valid tools: ${BATCHABLE_TOOLS.join(", ")}.`;
+    }
+    if (calls[i].arguments !== undefined && (typeof calls[i].arguments !== "object" || Array.isArray(calls[i].arguments))) {
+      return `${position} ('${name}') has \`arguments\` that are not an object.`;
+    }
+  }
+
+  return null;
 };
 
 /**
@@ -319,6 +390,9 @@ export const handleToolCall = async (name, args, getApiKey, getProjectId = null)
       case "create_post": {
         const payload = {
           content: params.content,
+          // Per-destination copy, so one call can write natively for each
+          // platform. The backend stores one post per profile either way.
+          variants: params.variants,
           platforms: params.platforms,
           targetAccounts: params.targetAccounts,
           publishImmediately: params.publishImmediately ?? false,
@@ -389,6 +463,74 @@ export const handleToolCall = async (name, args, getApiKey, getProjectId = null)
           mediaUrl: result.mediaUrl || result.imageUrl,
           hint: "Pass this as mediaUrl to create_post or update_post to attach it.",
         });
+      }
+
+      case "multicall": {
+        const calls = params.calls;
+        const invalid = validateBatch(calls);
+        if (invalid) return fail(invalid);
+
+        // Sequential on purpose: a batch usually means "generate the image,
+        // then post it", and later calls read state earlier ones wrote.
+        const stopOnError = params.stopOnError ?? true;
+        const results = [];
+        const skipped = [];
+
+        for (let i = 0; i < calls.length; i++) {
+          const step = calls[i];
+          const toolName = step.tool || step.name;
+          const id = step.id || `call_${i + 1}`;
+
+          // The batch's workspace applies to every call that did not name its
+          // own, so a caller does not repeat workspaceId twenty times.
+          const stepArgs = { ...(step.arguments || step.args || {}) };
+          if (params.workspaceId && stepArgs.workspaceId === undefined) {
+            stepArgs.workspaceId = params.workspaceId;
+          }
+
+          const stepResult = await handleToolCall(toolName, stepArgs, getApiKey, getProjectId);
+          const payload = readResult(stepResult);
+
+          if (stepResult?.isError) {
+            results.push({ id, tool: toolName, ok: false, error: typeof payload === "string" ? payload : payload?.error || "Tool call failed" });
+            if (stopOnError) {
+              // Everything after the failure is reported as skipped rather
+              // than silently missing, so the caller knows what to retry.
+              for (let j = i + 1; j < calls.length; j++) {
+                skipped.push({ id: calls[j].id || `call_${j + 1}`, tool: calls[j].tool || calls[j].name });
+              }
+              break;
+            }
+            continue;
+          }
+
+          results.push({ id, tool: toolName, ok: true, result: payload });
+        }
+
+        const succeeded = results.filter((r) => r.ok).length;
+        const failed = results.length - succeeded;
+
+        const summary = {
+          ok: failed === 0 && skipped.length === 0,
+          requested: calls.length,
+          executed: results.length,
+          succeeded,
+          failed,
+          results,
+          ...(skipped.length
+            ? {
+                skipped,
+                note: `Stopped at the first failure; ${skipped.length} call(s) were not run. Pass stopOnError: false to attempt every call.`,
+              }
+            : {}),
+        };
+
+        // Nothing worked, so the batch as a whole failed - said plainly rather
+        // than handed back as a success containing only errors.
+        if (succeeded === 0) {
+          return { isError: true, content: [{ type: "text", text: JSON.stringify(summary, null, 2) }] };
+        }
+        return ok(summary);
       }
 
       default:
