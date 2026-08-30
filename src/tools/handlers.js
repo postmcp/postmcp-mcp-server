@@ -3,6 +3,10 @@ import { toolDefinitions } from "./definitions.js";
 import {
   CHARACTER_LIMITS,
   MEDIA_REQUIRED,
+  VIDEO_REQUIRED,
+  VIDEO_LIMITS,
+  TITLE_FROM_FIRST_LINE,
+  isVideoUrl,
   LINK_SURCHARGE_CREDITS,
   calculatePostCredits,
   containsLink,
@@ -341,6 +345,41 @@ export const handleToolCall = async (name, args, getApiKey, getProjectId = null)
           ? []
           : platformsHit.filter((platform) => MEDIA_REQUIRED.includes(platform));
 
+        // A still image is media, but it is not a Short. Checked separately so
+        // the caller is told which of the two problems they have.
+        const needsVideo =
+          params.mediaUrl && !isVideoUrl(params.mediaUrl)
+            ? platformsHit.filter((platform) => VIDEO_REQUIRED.includes(platform))
+            : [];
+
+        // The first line becomes the video title, so an over-long one is
+        // silently truncated rather than rejected - worth saying before the
+        // upload, not after.
+        // Cross-posting one clip everywhere fails on whichever network has the
+        // tightest ceiling, and the failure arrives at publish time. Naming the
+        // limits here is the only warning available, since the duration cannot
+        // be read from a URL.
+        const videoAttached = isVideoUrl(params.mediaUrl);
+        const videoLimits = videoAttached
+          ? Object.fromEntries(
+              platformsHit.filter((p) => VIDEO_LIMITS[p]).map((p) => [p, VIDEO_LIMITS[p].note])
+            )
+          : {};
+        const tightestVideoLimit = videoAttached
+          ? platformsHit
+              .filter((p) => VIDEO_LIMITS[p])
+              .sort((a, b) => VIDEO_LIMITS[a].maxSeconds - VIDEO_LIMITS[b].maxSeconds)[0]
+          : null;
+
+        const longTitles = platformsHit
+          .filter((platform) => TITLE_FROM_FIRST_LINE[platform])
+          .map((platform) => {
+            const firstLine = content.split("\n").map((l) => l.trim()).find(Boolean) || "";
+            const limit = TITLE_FROM_FIRST_LINE[platform];
+            return firstLine.length > limit ? { platform, limit, length: firstLine.length } : null;
+          })
+          .filter(Boolean);
+
         const stale = targets.filter((t) => t.needsReconnect).map((t) => `${t.platform}:${t.username || t.profileId}`);
 
         const credits = calculatePostCredits(content, targets);
@@ -357,7 +396,16 @@ export const handleToolCall = async (name, args, getApiKey, getProjectId = null)
         tooLong.forEach((t) =>
           blockers.push(`Copy is ${t.over} character(s) over ${t.platform}'s ${t.limit}-character limit.`)
         );
-        missingMedia.forEach((platform) => blockers.push(`${platform} will not accept a post without media.`));
+        missingMedia.forEach((platform) =>
+          blockers.push(
+            platform === "youtube"
+              ? "YouTube Shorts needs a video. Attach a vertical clip of three minutes or less."
+              : `${platform} will not accept a post without media.`
+          )
+        );
+        needsVideo.forEach((platform) =>
+          blockers.push(`${platform} only accepts video; the attached media is not a video file.`)
+        );
         if (credits > balance) {
           blockers.push(`Costs ${credits} credits but the workspace has ${balance}.`);
         }
@@ -367,6 +415,16 @@ export const handleToolCall = async (name, args, getApiKey, getProjectId = null)
           warnings.push(`Ignored, not connected: ${unknown.join(", ")}`);
         }
         stale.forEach((t) => warnings.push(`${t} needs reconnecting and will likely fail at publish time.`));
+        if (tightestVideoLimit) {
+          warnings.push(
+            `Video post: the tightest limit among the targets is ${tightestVideoLimit} (${VIDEO_LIMITS[tightestVideoLimit].note}). A clip over that is rejected at publish time.`
+          );
+        }
+        longTitles.forEach(({ platform, limit, length }) =>
+          warnings.push(
+            `The first line of the copy becomes the ${platform} title and is ${length} characters; it will be cut to ${limit}.`
+          )
+        );
         if (containsLink(content)) {
           warnings.push(`Copy contains a link, which adds a one-off ${LINK_SURCHARGE_CREDITS}-credit surcharge.`);
         }
@@ -381,6 +439,7 @@ export const handleToolCall = async (name, args, getApiKey, getProjectId = null)
           })),
           unknownTargets: unknown,
           limits: Object.fromEntries(platformsHit.map((p) => [p, CHARACTER_LIMITS[p]])),
+          ...(videoAttached ? { videoLimits } : {}),
           credits: { cost: credits, balance, remainingAfter: balance - credits },
           blockers,
           warnings,

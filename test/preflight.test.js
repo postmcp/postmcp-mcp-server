@@ -59,6 +59,68 @@ test('a platform that will not take a post without media is a blocker', async ()
     assert.equal(withMedia.ok, true);
 });
 
+test('YouTube without a video is a blocker, and a still image is not a substitute', async () => {
+    const withoutMedia = await preflight(
+        { content: 'Launch clip.', platforms: ['youtube'] },
+        userWith([account('youtube', 'UC1')])
+    );
+    assert.equal(withoutMedia.ok, false);
+    assert.match(withoutMedia.blockers[0], /YouTube Shorts needs a video/);
+
+    const withImage = await preflight(
+        { content: 'Launch clip.', platforms: ['youtube'], mediaUrl: 'https://cdn.example.com/a.jpg' },
+        userWith([account('youtube', 'UC1')])
+    );
+    assert.equal(withImage.ok, false);
+    assert.match(withImage.blockers[0], /only accepts video/);
+
+    const withVideo = await preflight(
+        { content: 'Launch clip.', platforms: ['youtube'], mediaUrl: 'https://cdn.example.com/a.mp4' },
+        userWith([account('youtube', 'UC1')])
+    );
+    assert.equal(withVideo.ok, true);
+});
+
+test('an over-long first line is warned about, since YouTube cuts the title rather than refusing it', async () => {
+    const data = await preflight(
+        {
+            content: `${'a'.repeat(140)}\n\nBody copy.`,
+            platforms: ['youtube'],
+            mediaUrl: 'https://cdn.example.com/a.mp4',
+        },
+        userWith([account('youtube', 'UC1')])
+    );
+
+    assert.equal(data.ok, true);
+    assert.ok(data.warnings.some((w) => /becomes the youtube title and is 140 characters/.test(w)));
+});
+
+test('a video cross-posted widely is warned about with the tightest limit, not the average', async () => {
+    const data = await preflight(
+        {
+            content: 'Launch clip.',
+            platforms: ['linkedin', 'bluesky', 'twitter'],
+            mediaUrl: 'https://cdn.example.com/a.mp4',
+        },
+        userWith([account('linkedin', 'li1'), account('bluesky', 'bs1'), account('twitter', 'x1')])
+    );
+
+    // Bluesky's 60 seconds is the binding constraint, not LinkedIn's 30 minutes.
+    assert.ok(data.warnings.some((w) => /tightest limit among the targets is bluesky/.test(w)));
+    assert.equal(data.videoLimits.bluesky, 'up to 60 seconds and 50MB');
+    assert.ok(data.videoLimits.linkedin);
+});
+
+test('an image post carries no video limits at all', async () => {
+    const data = await preflight(
+        { content: 'Photo.', platforms: ['linkedin'], mediaUrl: 'https://cdn.example.com/a.jpg' },
+        userWith([account('linkedin', 'li1')])
+    );
+
+    assert.equal(data.videoLimits, undefined);
+    assert.ok(!data.warnings.some((w) => /tightest limit/.test(w)));
+});
+
 test('a post costing more than the balance is blocked before it is charged', async () => {
     const data = await preflight(
         { content: 'Hello.', platforms: ['twitter'] },

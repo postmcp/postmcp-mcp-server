@@ -6,7 +6,7 @@
 
 Official [PostMCP AI](https://postmcpai.com) Model Context Protocol (MCP) Server. Connect your social media publishing pipelines directly into AI assistants, desktop applications, IDE workflows, and web environments like **Claude Desktop**, **Claude.ai**, **Cursor**, and **ChatGPT Custom GPTs**.
 
-Supported platforms include **LinkedIn**, **X (Twitter)**, **Facebook**, **Instagram**, **Threads**, and **Bluesky**.
+Supported platforms include **LinkedIn**, **X (Twitter)**, **Facebook**, **Instagram**, **Threads**, **Bluesky**, and **YouTube Shorts**.
 
 ---
 

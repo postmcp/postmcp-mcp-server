@@ -130,7 +130,7 @@ export const toolDefinitions = [
   {
     name: "preflight_post",
     description:
-      "Dry-run a post before creating it: checks copy against each platform's character limit, flags profiles that are not connected or need reconnecting, warns when a platform requires media, and reports the credit cost against the workspace balance. Costs nothing and publishes nothing. Run this before create_post whenever the copy is long, carries a link, or targets several platforms.",
+      "Dry-run a post before creating it: checks copy against each platform's character limit, flags profiles that are not connected or need reconnecting, warns when a platform requires media, reports each target's video limit when a video is attached, and reports the credit cost against the workspace balance. Costs nothing and publishes nothing. Run this before create_post whenever the copy is long, carries a link, or targets several platforms.",
     inputSchema: {
       type: "object",
       properties: {
@@ -150,7 +150,7 @@ export const toolDefinitions = [
         },
         mediaUrl: {
           type: "string",
-          description: "Media that would be attached, if any.",
+          description: "Media that would be attached, if any. A video URL makes the check report per-platform video limits.",
         },
         workspaceId,
       },
@@ -167,7 +167,7 @@ export const toolDefinitions = [
         content: {
           type: "string",
           description:
-            "The text body / commentary of the post. Used for any profile that does not carry its own content.",
+            "The text body / commentary of the post. Used for any profile that does not carry its own content. On YouTube the first line becomes the Short's title (cut at 100 characters) and the whole body becomes the description, so lead with a hook.",
         },
         variants: {
           type: "object",
@@ -210,7 +210,7 @@ export const toolDefinitions = [
         mediaUrl: {
           type: "string",
           description:
-            "Optional public URL of an image/video to attach. Use the mediaUrl returned by generate_image to attach a generated image.",
+            "Optional public URL of an image/video to attach. Use the mediaUrl returned by generate_image to attach a generated image. Video is uploaded natively to every platform, but each has its own ceiling - Bluesky's 60 seconds is usually the binding one - so run preflight_post before sending one clip to several networks. Required, and must be a video file, when the post targets YouTube.",
         },
         workspaceId,
       },
