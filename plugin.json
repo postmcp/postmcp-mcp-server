@@ -1,0 +1,11 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "postmcpai",
+  "version": "1.0.1",
+  "description": "Publish and schedule posts to LinkedIn, X, Facebook, Instagram, Threads, Bluesky and YouTube Shorts.",
+  "author": { "name": "PostMCP AI", "email": "support@postmcpai.com", "url": "https://postmcpai.com" },
+  "homepage": "https://www.postmcpai.com/mcp-server",
+  "repository": "https://github.com/postmcp/postmcp-mcp-server",
+  "license": "MIT",
+  "keywords": ["mcp", "social-media", "linkedin", "twitter", "facebook", "instagram", "threads", "bluesky", "youtube", "scheduling"]
+}
