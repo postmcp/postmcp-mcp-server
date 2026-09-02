@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "postmcpai": {
+      "command": "npx",
+      "args": ["-y", "@postmcpai/server"],
+      "env": {
+        "POSTMCPAI_API_KEY": "${POSTMCPAI_API_KEY}"
+      }
+    }
+  }
+}
