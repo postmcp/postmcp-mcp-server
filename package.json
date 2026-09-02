@@ -1,6 +1,6 @@
 {
   "name": "@postmcpai/server",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Official Model Context Protocol (MCP) Server for PostMCP AI. Integrate multi-platform social media publishing into your AI clients, Claude.ai, Cursor, and Custom GPTs.",
   "type": "module",
   "main": "./src/index.js",

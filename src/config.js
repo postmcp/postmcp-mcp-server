@@ -4,7 +4,7 @@ dotenv.config();
 
 export const config = {
   name: "postmcpai-server",
-  version: "1.0.0",
+  version: "1.0.1",
   defaultApiUrl: "https://api.postmcpai.com",
   get apiUrl() {
     return process.env.POSTMCPAI_API_URL || process.env.POSTMCP_API_URL || this.defaultApiUrl;
