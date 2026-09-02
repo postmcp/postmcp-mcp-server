@@ -55,7 +55,7 @@ mcp-server/
 | Environment Variable | Description | Default Value |
 | :--- | :--- | :--- |
 | `POSTMCPAI_API_KEY` | **Required.** Your secret API key from the PostMCP AI dashboard. | `None` |
-| `POSTMCPAI_API_URL` | The API root URL of your PostMCP AI backend service. | `http://localhost:5023` |
+| `POSTMCPAI_API_URL` | Backend API root. Only set for a self-hosted or local backend. | `https://api.postmcpai.com` |
 | `POSTMCPAI_PROJECT_ID` | Optional. Overrides the workspace the API key is bound to. Overridden in turn by a call's `workspaceId`. | The workspace the API key was issued from |
 | `PORT` | Setting this launches the server in **Remote Streamable HTTP Mode**. | `None` (Defaults to Stdio Mode) |
 
@@ -145,8 +145,7 @@ Add the configuration below to your Claude Desktop config file:
       "command": "npx",
       "args": ["-y", "@postmcpai/server"],
       "env": {
-        "POSTMCPAI_API_KEY": "pmcp_sec_your_secret_api_key_here",
-        "POSTMCPAI_API_URL": "http://localhost:5023"
+        "POSTMCPAI_API_KEY": "pmcp_sec_your_secret_api_key_here"
       }
     }
   }
@@ -165,7 +164,6 @@ Add the configuration below to your Claude Desktop config file:
    - **Command**: `npx -y @postmcpai/server`
 4. Under **Environment Variables**, add:
    - `POSTMCPAI_API_KEY` = `pmcp_sec_your_secret_api_key_here`
-   - `POSTMCPAI_API_URL` = `http://localhost:5023`
 5. Click **Save**.
 
 ---
@@ -177,7 +175,6 @@ Host this server on any cloud service (Render, Railway, Fly.io, Vercel) or tunne
 #### Launching in HTTP Mode:
 ```bash
 export POSTMCPAI_API_KEY="pmcp_sec_your_secret_api_key_here"
-export POSTMCPAI_API_URL="https://your-backend-domain.com"
 export PORT=3000
 
 npm run start:sse
@@ -221,7 +218,7 @@ app.listen(3000);
 
 ```bash
 # Clone the repository
-git clone https://github.com/postmcpai/postmcp-mcp-server.git
+git clone https://github.com/postmcp/postmcp-mcp-server.git
 cd postmcp-mcp-server
 
 # Install dependencies

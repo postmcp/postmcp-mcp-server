@@ -5,7 +5,7 @@
   "type": "module",
   "main": "./src/index.js",
   "bin": {
-    "postmcpai-server": "./bin/cli.js"
+    "postmcpai-server": "bin/cli.js"
   },
   "files": [
     "bin",
@@ -15,6 +15,12 @@
     "LICENSE",
     ".env.example"
   ],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "start": "node index.js",
     "start:sse": "PORT=3000 node index.js",
@@ -48,10 +54,10 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/postmcpai/postmcp-mcp-server.git"
+    "url": "git+https://github.com/postmcp/postmcp-mcp-server.git"
   },
   "bugs": {
-    "url": "https://github.com/postmcpai/postmcp-mcp-server/issues"
+    "url": "https://github.com/postmcp/postmcp-mcp-server/issues"
   },
   "homepage": "https://postmcpai.com"
 }
