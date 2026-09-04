@@ -16,6 +16,33 @@ const workspaceId = {
     "Workspace (project) id to act on, from list_workspaces. Omit to use the caller's default workspace. Always pass this when the user belongs to more than one workspace.",
 };
 
+/**
+ * What a YouTube upload is sent with. YouTube's developer policies require
+ * that the person uploading can set the title, description and privacy status
+ * themselves, and that the visibility is stated before anything goes out - so
+ * this is offered on every route that creates or edits a post, and the Short
+ * is uploaded with exactly what is passed here.
+ */
+export const youtubeUploadDetails = (scope = "any YouTube profile in the target list") => ({
+  type: "object",
+  description: `Upload details for ${scope}; ignored for other platforms. The Short is uploaded with privacyStatus as its visibility - public unless set to unlisted or private - so confirm the visibility with the user before creating the post. Applies to this new upload only; nothing already on the channel is read or changed.`,
+  properties: {
+    title: {
+      type: "string",
+      description: "Video title, up to 100 characters. Defaults to the first line of the copy.",
+    },
+    description: {
+      type: "string",
+      description: "Video description, up to 5000 characters. Defaults to the whole copy.",
+    },
+    privacyStatus: {
+      type: "string",
+      enum: ["public", "unlisted", "private"],
+      description: "Visibility of the uploaded Short. Defaults to public.",
+    },
+  },
+});
+
 const targetAccountItem = (extra = "") => ({
   type: "object",
   properties: {
@@ -32,6 +59,7 @@ const targetAccountItem = (extra = "") => ({
       type: "string",
       description: "Media for this profile only, overriding the shared mediaUrl.",
     },
+    youtube: youtubeUploadDetails("this profile only, when it is a YouTube channel"),
   },
   required: ["platform"],
   description: extra || undefined,
@@ -167,8 +195,9 @@ export const toolDefinitions = [
         content: {
           type: "string",
           description:
-            "The text body / commentary of the post. Used for any profile that does not carry its own content. On YouTube the first line becomes the Short's title (cut at 100 characters) and the whole body becomes the description, so lead with a hook.",
+            "The text body / commentary of the post. Used for any profile that does not carry its own content. On YouTube, unless `youtube.title` / `youtube.description` are given, the first line becomes the Short's title (cut at 100 characters) and the whole body becomes the description, so lead with a hook.",
         },
+        youtube: youtubeUploadDetails(),
         variants: {
           type: "object",
           description:
@@ -294,6 +323,7 @@ export const toolDefinitions = [
           type: "string",
           description: "Replacement media URL to attach.",
         },
+        youtube: youtubeUploadDetails("a post going to a YouTube channel"),
         status: {
           type: "string",
           enum: ["scheduled", "draft", "failed"],

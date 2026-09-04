@@ -425,6 +425,14 @@ export const handleToolCall = async (name, args, getApiKey, getProjectId = null)
             `The first line of the copy becomes the ${platform} title and is ${length} characters; it will be cut to ${limit}.`
           )
         );
+        // The visibility a Short goes out with has to be stated before it is
+        // sent, and the person can choose it - so preflight says what will
+        // happen unless create_post is told otherwise.
+        if (targets.some((t) => t.platform === "youtube")) {
+          warnings.push(
+            "YouTube: the Short will be uploaded as PUBLIC unless create_post is given youtube.privacyStatus (public, unlisted or private). Pass youtube.title and youtube.description to set them explicitly; otherwise the first line and the whole copy are used. Confirm the visibility with the user first."
+          );
+        }
         if (containsLink(content)) {
           warnings.push(`Copy contains a link, which adds a one-off ${LINK_SURCHARGE_CREDITS}-credit surcharge.`);
         }
@@ -462,6 +470,9 @@ export const handleToolCall = async (name, args, getApiKey, getProjectId = null)
           timezone: params.timezone || "",
           mediaUrl: params.mediaUrl || "",
           imageData: params.imageData || null,
+          // Title, description and visibility for a YouTube upload. The
+          // backend validates them and stores the resolved values on the post.
+          ...(params.youtube ? { youtube: params.youtube } : {}),
         };
         const result = await callBackend("/post/create", "POST", payload);
         // One post per targeted profile comes back. Serializing them keeps the
@@ -501,6 +512,7 @@ export const handleToolCall = async (name, args, getApiKey, getProjectId = null)
         if (params.scheduleTime !== undefined) payload.scheduleTime = params.scheduleTime;
         if (params.timezone !== undefined) payload.timezone = params.timezone;
         if (params.mediaUrl !== undefined) payload.mediaUrl = params.mediaUrl;
+        if (params.youtube !== undefined) payload.youtube = params.youtube;
         if (params.status !== undefined) payload.status = params.status;
 
         const result = await callBackend(`/post/${params.id}`, "PUT", payload);
