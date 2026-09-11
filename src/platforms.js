@@ -63,6 +63,13 @@ export const CREDITS_PER_DELIVERY = { twitter: 5, default: 1 };
 /** Flat surcharge, charged once, on a post whose copy contains a link. */
 export const LINK_SURCHARGE_CREDITS = 50;
 
+/**
+ * Credits charged per get_post_analytics call. Charged per call, whether the
+ * numbers come fresh from the networks or from the stored snapshot; the
+ * figures carried on list_posts and the workspace summary are free.
+ */
+export const ANALYTICS_CREDITS_PER_CALL = 1;
+
 const LINK_PATTERN = /https?:\/\/[^\s]+/;
 
 /**

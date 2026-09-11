@@ -1,7 +1,7 @@
 /**
  * Definitions and JSON Schemas for all MCP tools exposed by the PostMCP AI Server.
  */
-import { PLATFORMS } from "../platforms.js";
+import { PLATFORMS, ANALYTICS_CREDITS_PER_CALL } from "../platforms.js";
 
 /**
  * Workspace selector, accepted by every tool that reads or writes workspace data.
@@ -94,6 +94,24 @@ export const toolDefinitions = [
     },
   },
   {
+    name: "get_profile_analytics",
+    description:
+      `A connected profile's own statistics from its network: followers, following, post count, and - where the network reports it - views or page views, with the raw figures under the platform's own names. Nothing reads the networks on its own: without refresh this returns what the last reading stored, free, and says when it was read or that it never has been. With refresh it reads the network now and costs ${ANALYTICS_CREDITS_PER_CALL} credit - do that when the numbers are missing or the user wants them current, and say what it cost. Get platform and profileId from get_connected_accounts. LinkedIn only answers for organization pages (unavailable on personal profiles); a note mentioning reconnecting means the owner must reconnect that account to grant the insights permission. For how a single post did, use get_post_analytics.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        platform: { type: "string", enum: PLATFORMS, description: "The profile's platform." },
+        profileId: { type: "string", description: "The profileId from get_connected_accounts." },
+        refresh: {
+          type: "boolean",
+          description: `Read the network now (${ANALYTICS_CREDITS_PER_CALL} credit) instead of returning the stored reading (free). Default false.`,
+        },
+        workspaceId,
+      },
+      required: ["platform", "profileId"],
+    },
+  },
+  {
     name: "get_account_health",
     description:
       "Report connections whose access token has expired or is about to, and which therefore need the user to reconnect. Check this before scheduling anything far out - a post scheduled onto a dead connection fails silently at publish time.",
@@ -149,6 +167,26 @@ export const toolDefinitions = [
         id: {
           type: "string",
           description: "The Database ObjectId of the post.",
+        },
+        workspaceId,
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "get_post_analytics",
+    description:
+      `How a published post is doing on each network it went to: views, likes, comments, shares, saves and clicks per profile, with the raw metrics under the platform's own names. Nothing reads the networks on its own - a post's numbers exist only once someone has asked for them. Without refresh this returns what the last reading stored, free, and says per profile when it was read or that it never has been. With refresh it reads every network now and costs ${ANALYTICS_CREDITS_PER_CALL} credit: do that when the numbers are missing or the user wants them current, and tell the user what it cost. A profile with \`unavailable: true\` will never report - LinkedIn only answers for organization pages, never personal profiles - and one with an \`error\` mentioning reconnecting needs the owner to reconnect that account to grant the insights scope.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: {
+          type: "string",
+          description: "The Database ObjectId of the published post.",
+        },
+        refresh: {
+          type: "boolean",
+          description: `Read the numbers from the networks now (${ANALYTICS_CREDITS_PER_CALL} credit) instead of returning the stored reading (free). Default false.`,
         },
         workspaceId,
       },

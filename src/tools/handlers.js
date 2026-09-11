@@ -51,10 +51,30 @@ const flattenAccounts = (connectedAccounts = {}) => {
         profileId: acc.profileId,
         isOrganization: acc.isOrganization || false,
         needsReconnect: !!acc.needsReconnect,
+        // The profile's last stored statistics, if anyone has read them.
+        ...(acc.analytics?.fetchedAt
+          ? { analytics: { fetchedAt: acc.analytics.fetchedAt, ...(acc.analytics.summary || {}) } }
+          : {}),
       });
     });
   }
   return connected;
+};
+
+/**
+ * The compact form of a delivery's analytics snapshot, as carried on every
+ * post listing. The full reading - raw metrics, source, per-row notes - is
+ * what get_post_analytics returns; here only the normalized numbers travel,
+ * so a list of fifty posts stays readable.
+ */
+const serializeAnalytics = (analytics) => {
+  if (!analytics) return null;
+  return {
+    fetchedAt: analytics.fetchedAt || null,
+    ...(analytics.summary || {}),
+    ...(analytics.error ? { error: analytics.error } : {}),
+    ...(analytics.unavailable ? { unavailable: true } : {}),
+  };
 };
 
 /** The post shape returned to callers - the fields an agent can act on. */
@@ -71,6 +91,8 @@ const serializePost = (p) => ({
     postId: t.postId,
     url: t.url,
     error: t.error,
+    // Null until the network has been read; absent keys mean "not reported".
+    analytics: serializeAnalytics(t.analytics),
   })),
   status: p.status,
   scheduleDate: p.scheduleDate,
@@ -318,6 +340,61 @@ export const handleToolCall = async (name, args, getApiKey, getProjectId = null)
           );
         }
         return ok(serializePost(post));
+      }
+
+      case "get_post_analytics": {
+        // The refresh is a POST because it reads the networks and is charged;
+        // the plain read is a free GET on the stored reading. Same shape.
+        const data = params.refresh
+          ? await callBackend(`/post/${params.id}/analytics/refresh`, "POST", {})
+          : await callBackend(`/post/${params.id}/analytics`);
+
+        return ok({
+          id: data.id,
+          content: data.content,
+          status: data.status,
+          publishedAt: data.publishedAt,
+          fetchedAt: data.fetchedAt,
+          totals: data.totals,
+          measured: data.measured,
+          measurable: data.measurable,
+          targets: (data.targets || [])
+            .filter((t) => t.measurable)
+            .map((t) => ({
+              platform: t.platform,
+              profileId: t.profileId,
+              username: t.username,
+              url: t.url,
+              publishedAt: t.publishedAt,
+              analytics: t.analytics,
+            })),
+          notes: data.notes || [],
+          ...(data.refresh ? { refresh: data.refresh } : {}),
+          ...(data.message ? { message: data.message } : {}),
+          // What this call cost and what is left, so the agent can say so.
+          ...(data.credits ? { credits: data.credits } : {}),
+          ...(data.pricing ? { pricing: data.pricing } : {}),
+        });
+      }
+
+      case "get_profile_analytics": {
+        const platform = String(params.platform || "").toLowerCase();
+        const profileId = encodeURIComponent(String(params.profileId || ""));
+        const data = params.refresh
+          ? await callBackend(`/connect/${platform}/${profileId}/analytics/refresh`, "POST", {})
+          : await callBackend(`/connect/${platform}/${profileId}/analytics`);
+        return ok({
+          platform: data.platform,
+          profileId: data.profileId,
+          username: data.username,
+          name: data.name,
+          isOrganization: data.isOrganization,
+          analytics: data.analytics,
+          note: data.note || "",
+          ...(data.message ? { message: data.message } : {}),
+          ...(data.credits ? { credits: data.credits } : {}),
+          ...(data.pricing ? { pricing: data.pricing } : {}),
+        });
       }
 
       case "preflight_post": {

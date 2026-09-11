@@ -12,7 +12,7 @@ Supported platforms include **LinkedIn**, **X (Twitter)**, **Facebook**, **Insta
 
 ## 🚀 Features & Capabilities
 
-- 🤖 **15 Built-in Tools**: Workspaces, connected accounts and their token health, brand kits, the post queue, pre-flight checks, create/schedule/reschedule/publish/retry/delete, and image generation.
+- 🤖 **17 Built-in Tools**: Workspaces, connected accounts and their token health, brand kits, the post queue, pre-flight checks, create/schedule/reschedule/publish/retry/delete, per-post and per-profile analytics, and image generation.
 - ⚡ **Dual Transport Modes**: Native **Stdio mode** (for local desktop apps & IDEs) and **Streamable HTTP mode** (for web services, Claude.ai, and remote connectors).
 - 🔑 **Flexible Authentication**: Auto-detects API key from environment variables (`POSTMCPAI_API_KEY`), URL query parameters (`?apikey=YOUR_KEY`), or HTTP authorization headers (`x-api-key`, `Bearer token`).
 - 🗂️ **Multi-Workspace Aware**: The API key carries its own workspace, so a bare key is enough. To act on another one, every tool takes an optional `workspaceId`, also settable per connection (`?projectId=...`, `x-project-id`) or per process (`POSTMCPAI_PROJECT_ID`).
@@ -73,9 +73,11 @@ Every tool below also accepts an optional `workspaceId` (from `list_workspaces`)
 | `list_workspaces` | Every workspace the user belongs to, with ids, roles, and connected platforms. | — | — |
 | `get_connected_accounts` | Connected social profiles with the `profileId` needed to target them. | — | `workspaceId` |
 | `get_account_health` | Connections whose token expired or is close to it and need reconnecting. | — | `workspaceId` |
+| `get_profile_analytics` | A connected profile's followers, following, post count and views from its network. Stored reading is free; `refresh` reads the network now for 1 credit. | `platform`, `profileId` | `refresh` |
 | `list_brandings` | Brand kits: tone, audience, keywords, style images. | — | `workspaceId` |
 | `list_posts` | Post queue, newest first, with per-profile delivery status, pagination and counts. | — | `status`, `page`, `limit`, `all` |
 | `get_post` | One post in full: which profiles received it, live URLs, and per-profile errors. | `id` | — |
+| `get_post_analytics` | Views, likes, comments, shares, saves and clicks per profile, plus the raw platform metrics. Stored reading is free; `refresh` reads the networks now for 1 credit. | `id` | `refresh` |
 
 ### Writing
 
@@ -126,6 +128,7 @@ The reply carries one entry per call — `{ id, tool, ok, result }` or `{ id, to
 - **One post per profile.** `create_post` stores a separate post per targeted profile, so each can be edited, retried or cancelled on its own. Give per-profile copy through `targetAccounts[].content` or the `variants` map.
 - **Always pass `timezone`** when a wall-clock time matters. The backend defaults to UTC, so a 9:00 IST post scheduled without a zone goes out at 14:30 IST.
 - **Credits** are charged per profile delivered to (X/Twitter costs 5, others 1), plus a one-off 50-credit surcharge when the copy contains a link. `preflight_post` reports this before you commit.
+- **Analytics are read on request, never in the background.** `list_posts` and `get_connected_accounts` carry what the last reading stored, free. `get_post_analytics` (one post, every network it went to) and `get_profile_analytics` (one connected profile: followers, posts, views) with `refresh: true` read the network now for 1 credit each; without it, the stored reading is free. `engagements` is likes + comments + shares on every network, so it compares across platforms. A `null` means the network does not report that metric (Bluesky has no views), an `error` naming *reconnect* means the account predates the insights permission and its owner must reconnect it, and `unavailable: true` means the network never answers for that kind of post (LinkedIn personal profiles).
 
 ---
 
