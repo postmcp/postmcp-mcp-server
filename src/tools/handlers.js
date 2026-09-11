@@ -238,7 +238,6 @@ export const handleToolCall = async (name, args, getApiKey, getProjectId = null)
           email: data.email,
           plan: data.plan,
           credits: data.credits,
-          aiToken: data.aiToken,
           activeWorkspace: data.activeProject
             ? {
                 id: data.activeProject._id,
@@ -285,28 +284,6 @@ export const handleToolCall = async (name, args, getApiKey, getProjectId = null)
             : `${health.length} connection(s) need attention before they are posted to.`,
           connections: health,
         });
-      }
-
-      case "list_brandings": {
-        const user = await callBackend("/auth/user-data");
-        const workspace = projectId || user.activeProject?._id;
-        if (!workspace) {
-          return fail("No workspace resolved for this user; cannot list brand kits.");
-        }
-        const data = await callBackend(`/project/${workspace}/brandings`);
-        const brandings = Array.isArray(data) ? data : data?.brandings || [];
-        return ok(
-          brandings.map((b) => ({
-            id: b._id || b.id,
-            name: b.name,
-            description: b.description,
-            tone: b.tone,
-            audience: b.audience,
-            keywords: b.keywords,
-            styleImage: b.styleImage,
-            assets: (b.assets || []).map((a) => ({ url: a.url, name: a.name })),
-          }))
-        );
       }
 
       case "list_posts": {
@@ -618,12 +595,13 @@ export const handleToolCall = async (name, args, getApiKey, getProjectId = null)
 
       case "generate_image": {
         const payload = { prompt: params.prompt };
-        if (params.brandingId) payload.brandingId = params.brandingId;
         if (params.styleImageUrl) payload.styleImageUrl = params.styleImageUrl;
 
-        const result = await callBackend("/agent/generate-image", "POST", payload);
+        const result = await callBackend("/ai/generate-image", "POST", payload);
         return ok({
           mediaUrl: result.mediaUrl || result.imageUrl,
+          creditCost: result.creditCost,
+          remainingCredits: result.remainingCredits,
           hint: "Pass this as mediaUrl to create_post or update_post to attach it.",
         });
       }

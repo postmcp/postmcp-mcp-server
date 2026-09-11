@@ -69,12 +69,11 @@ Every tool below also accepts an optional `workspaceId` (from `list_workspaces`)
 
 | Tool Name | Description | Required | Optional |
 | :--- | :--- | :--- | :--- |
-| `get_user_info` | Authenticated user: plan, credit balance, AI tokens, active workspace and role. | — | `workspaceId` |
+| `get_user_info` | Authenticated user: plan, credit balance, active workspace and role. | — | `workspaceId` |
 | `list_workspaces` | Every workspace the user belongs to, with ids, roles, and connected platforms. | — | — |
 | `get_connected_accounts` | Connected social profiles with the `profileId` needed to target them. | — | `workspaceId` |
 | `get_account_health` | Connections whose token expired or is close to it and need reconnecting. | — | `workspaceId` |
 | `get_profile_analytics` | A connected profile's followers, following, post count and views from its network. Stored reading is free; `refresh` reads the network now for 1 credit. | `platform`, `profileId` | `refresh` |
-| `list_brandings` | Brand kits: tone, audience, keywords, style images. | — | `workspaceId` |
 | `list_posts` | Post queue, newest first, with per-profile delivery status, pagination and counts. | — | `status`, `page`, `limit`, `all` |
 | `get_post` | One post in full: which profiles received it, live URLs, and per-profile errors. | `id` | — |
 | `get_post_analytics` | Views, likes, comments, shares, saves and clicks per profile, plus the raw platform metrics. Stored reading is free; `refresh` reads the networks now for 1 credit. | `id` | `refresh` |
@@ -90,7 +89,7 @@ Every tool below also accepts an optional `workspaceId` (from `list_workspaces`)
 | `reschedule_post` | Move a post to a new slot, keeping copy and targets. Re-arms failed and draft posts. | `id`, `scheduleDate`, `scheduleTime` | `timezone` |
 | `reset_stuck_post` | Release a post stuck mid-publish so it can be retried. Delivered profiles keep their state. | `id` | `force` |
 | `delete_post` | Cancel and delete a scheduled or failed post. | `id` | — |
-| `generate_image` | Generate a post image and return its hosted URL for `mediaUrl`. Spends AI tokens. | `prompt` | `brandingId`, `styleImageUrl` |
+| `generate_image` | Generate a post image and return its hosted URL for `mediaUrl`. Costs 20 credits; paid plans only. | `prompt` | `styleImageUrl` |
 
 ### Batching
 

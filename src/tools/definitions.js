@@ -69,7 +69,7 @@ export const toolDefinitions = [
   {
     name: "get_user_info",
     description:
-      "Retrieve details of the logged-in user including subscription plan, credit balance, AI token count, the active workspace, and the caller's role in it.",
+      "Retrieve details of the logged-in user including subscription plan, credit balance, the active workspace, and the caller's role in it.",
     inputSchema: {
       type: "object",
       properties: { workspaceId },
@@ -115,15 +115,6 @@ export const toolDefinitions = [
     name: "get_account_health",
     description:
       "Report connections whose access token has expired or is about to, and which therefore need the user to reconnect. Check this before scheduling anything far out - a post scheduled onto a dead connection fails silently at publish time.",
-    inputSchema: {
-      type: "object",
-      properties: { workspaceId },
-    },
-  },
-  {
-    name: "list_brandings",
-    description:
-      "List the workspace's brand kits: tone of voice, audience, keywords, and reference style images. Use one to keep drafted copy on-brand, and pass its id to generate_image for on-brand visuals.",
     inputSchema: {
       type: "object",
       properties: { workspaceId },
@@ -425,7 +416,7 @@ export const toolDefinitions = [
   {
     name: "generate_image",
     description:
-      "Generate an image for a post from a text prompt and return its hosted URL, ready to pass to create_post as mediaUrl. Pass a brandingId from list_brandings to match the workspace's visual style. Spends AI tokens.",
+      "Generate an image for a post from a text prompt and return its hosted URL, ready to pass to create_post as mediaUrl. Costs 20 credits from the workspace balance and needs a paid plan; pass styleImageUrl to steer the visual style.",
     inputSchema: {
       type: "object",
       properties: {
@@ -433,13 +424,9 @@ export const toolDefinitions = [
           type: "string",
           description: "What the image should show. Be specific about subject, composition, and mood.",
         },
-        brandingId: {
-          type: "string",
-          description: "Brand kit id from list_brandings, whose reference image steers the visual style.",
-        },
         styleImageUrl: {
           type: "string",
-          description: "Public URL of a reference image to steer style directly, instead of a brand kit.",
+          description: "Public URL of a reference image to steer the visual style.",
         },
         workspaceId,
       },
