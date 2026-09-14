@@ -52,6 +52,69 @@ export const VIDEO_LIMITS = {
 /** Networks whose title is taken from the first line of the copy. */
 export const TITLE_FROM_FIRST_LINE = { youtube: 100 };
 
+/**
+ * How many pieces of media one post may carry on each network, and whether a
+ * set of several may include video. Mirrors the backend's MEDIA_SET_LIMITS.
+ *
+ * Two or more items publish as a carousel on Instagram and Threads, a
+ * multi-photo post on Facebook and LinkedIn, and a gallery of up to four on X
+ * and Bluesky. Only the two Meta carousels mix video into the set; everywhere
+ * else a video goes out on its own. YouTube takes one file, full stop.
+ */
+export const MEDIA_SET_LIMITS = {
+  instagram: { max: 10, mixedVideo: true, note: "carousel of 2-10 photos or videos" },
+  threads: { max: 20, mixedVideo: true, note: "carousel of 2-20 photos or videos" },
+  facebook: { max: 10, mixedVideo: false, note: "up to 10 photos in one post" },
+  linkedin: { max: 20, mixedVideo: false, note: "up to 20 images in one post" },
+  twitter: { max: 4, mixedVideo: false, note: "up to 4 images, or one video" },
+  bluesky: { max: 4, mixedVideo: false, note: "up to 4 images, or one video" },
+  youtube: { max: 1, mixedVideo: false, note: "one video per upload" },
+};
+
+/** The most items any network takes in one post. */
+export const MAX_MEDIA_ITEMS = Math.max(...Object.values(MEDIA_SET_LIMITS).map((limit) => limit.max));
+
+/**
+ * The ordered set of media a call is attaching: `mediaUrls` when it says
+ * anything, else `mediaUrl` as a one-item set. Blanks and repeats dropped.
+ *
+ * @param {{mediaUrls?: unknown, mediaUrl?: unknown}} input
+ * @returns {string[]}
+ */
+export const mediaSetOf = ({ mediaUrls, mediaUrl } = {}) => {
+  const fromSet = Array.isArray(mediaUrls)
+    ? mediaUrls.filter((url) => typeof url === "string" && url.trim()).map((url) => url.trim())
+    : [];
+  const list = fromSet.length ? fromSet : typeof mediaUrl === "string" && mediaUrl.trim() ? [mediaUrl.trim()] : [];
+  return [...new Set(list)];
+};
+
+/**
+ * Why a network would refuse this set of media, or '' if it would take it.
+ * Mirrors the backend's check so preflight says what create_post will say.
+ *
+ * @param {string} platform
+ * @param {string[]} mediaUrls
+ */
+export const mediaSetProblem = (platform, mediaUrls = []) => {
+  const urls = (Array.isArray(mediaUrls) ? mediaUrls : []).filter(Boolean);
+  if (urls.length <= 1) return "";
+
+  const limit = MEDIA_SET_LIMITS[platform];
+  if (!limit) return "";
+
+  if (limit.max <= 1) {
+    return `${platform} takes ${limit.note}; this post attaches ${urls.length} files.`;
+  }
+  if (urls.length > limit.max) {
+    return `${platform} takes ${limit.note}; this post attaches ${urls.length}. Remove ${urls.length - limit.max}.`;
+  }
+  if (!limit.mixedVideo && urls.some((url) => isVideoUrl(url))) {
+    return `${platform} takes ${limit.note} - it will not mix video into a set of several. Attach one video on its own, or images only.`;
+  }
+  return "";
+};
+
 const VIDEO_PATTERN = /\.(mp4|mov|m4v|webm|avi|mpe?g|wmv|flv|3gpp?)(\?.*)?$/i;
 
 /** Whether a media URL points at something a video-only network will take. */

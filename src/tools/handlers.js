@@ -5,8 +5,11 @@ import {
   MEDIA_REQUIRED,
   VIDEO_REQUIRED,
   VIDEO_LIMITS,
+  MEDIA_SET_LIMITS,
   TITLE_FROM_FIRST_LINE,
   isVideoUrl,
+  mediaSetOf,
+  mediaSetProblem,
   LINK_SURCHARGE_CREDITS,
   calculatePostCredits,
   containsLink,
@@ -100,6 +103,9 @@ const serializePost = (p) => ({
   timezone: p.timezone,
   scheduledAt: p.scheduledAt,
   mediaUrl: p.mediaUrl,
+  // Every attachment in order. Two or more means the post is (or will be) a
+  // carousel; a post stored before the set existed carries only mediaUrl.
+  mediaUrls: Array.isArray(p.mediaUrls) && p.mediaUrls.length ? p.mediaUrls : p.mediaUrl ? [p.mediaUrl] : [],
   platformStatuses: p.platformStatuses,
   attempts: p.attempts,
   lastError: p.lastError,
@@ -395,16 +401,28 @@ export const handleToolCall = async (name, args, getApiKey, getProjectId = null)
             over: length - CHARACTER_LIMITS[platform],
           }));
 
-        const missingMedia = params.mediaUrl
+        // The attachment set as create_post would read it: mediaUrls when it
+        // says anything, else mediaUrl as a one-item set.
+        const mediaSet = mediaSetOf(params);
+        const firstMedia = mediaSet[0] || "";
+
+        const missingMedia = firstMedia
           ? []
           : platformsHit.filter((platform) => MEDIA_REQUIRED.includes(platform));
 
         // A still image is media, but it is not a Short. Checked separately so
         // the caller is told which of the two problems they have.
         const needsVideo =
-          params.mediaUrl && !isVideoUrl(params.mediaUrl)
+          firstMedia && !isVideoUrl(firstMedia)
             ? platformsHit.filter((platform) => VIDEO_REQUIRED.includes(platform))
             : [];
+
+        // A carousel is judged per network, since each draws the line in a
+        // different place - ten slides is fine on Threads and one too many on
+        // Instagram - and create_post refuses the whole batch on the first one.
+        const carouselProblems = mediaSet.length > 1
+          ? platformsHit.map((platform) => mediaSetProblem(platform, mediaSet)).filter(Boolean)
+          : [];
 
         // The first line becomes the video title, so an over-long one is
         // silently truncated rather than rejected - worth saying before the
@@ -413,7 +431,7 @@ export const handleToolCall = async (name, args, getApiKey, getProjectId = null)
         // tightest ceiling, and the failure arrives at publish time. Naming the
         // limits here is the only warning available, since the duration cannot
         // be read from a URL.
-        const videoAttached = isVideoUrl(params.mediaUrl);
+        const videoAttached = mediaSet.some((url) => isVideoUrl(url));
         const videoLimits = videoAttached
           ? Object.fromEntries(
               platformsHit.filter((p) => VIDEO_LIMITS[p]).map((p) => [p, VIDEO_LIMITS[p].note])
@@ -460,6 +478,7 @@ export const handleToolCall = async (name, args, getApiKey, getProjectId = null)
         needsVideo.forEach((platform) =>
           blockers.push(`${platform} only accepts video; the attached media is not a video file.`)
         );
+        carouselProblems.forEach((problem) => blockers.push(problem));
         if (credits > balance) {
           blockers.push(`Costs ${credits} credits but the workspace has ${balance}.`);
         }
@@ -490,6 +509,18 @@ export const handleToolCall = async (name, args, getApiKey, getProjectId = null)
         if (containsLink(content)) {
           warnings.push(`Copy contains a link, which adds a one-off ${LINK_SURCHARGE_CREDITS}-credit surcharge.`);
         }
+        // What each network will make of a set of several, said even when it
+        // fits: a caller sending ten slides to X and Instagram together should
+        // know before the post is written that one of them is a gallery of at
+        // most four.
+        const mediaSetLimits = mediaSet.length > 1
+          ? Object.fromEntries(platformsHit.filter((p) => MEDIA_SET_LIMITS[p]).map((p) => [p, MEDIA_SET_LIMITS[p].note]))
+          : {};
+        if (mediaSet.length > 1 && !carouselProblems.length) {
+          warnings.push(
+            `Carousel of ${mediaSet.length}: publishes as a carousel on Instagram/Threads, a multi-photo post on Facebook/LinkedIn and a gallery on X/Bluesky. Order is kept as given.`
+          );
+        }
 
         return ok({
           ok: blockers.length === 0,
@@ -502,6 +533,7 @@ export const handleToolCall = async (name, args, getApiKey, getProjectId = null)
           unknownTargets: unknown,
           limits: Object.fromEntries(platformsHit.map((p) => [p, CHARACTER_LIMITS[p]])),
           ...(videoAttached ? { videoLimits } : {}),
+          ...(mediaSet.length > 1 ? { mediaCount: mediaSet.length, mediaSetLimits } : {}),
           credits: { cost: credits, balance, remainingAfter: balance - credits },
           blockers,
           warnings,
@@ -523,6 +555,9 @@ export const handleToolCall = async (name, args, getApiKey, getProjectId = null)
           // picked in; the backend resolves the two into a firing instant.
           timezone: params.timezone || "",
           mediaUrl: params.mediaUrl || "",
+          // The ordered attachment set. Sent only when given, so a caller who
+          // attached one file with mediaUrl is not read as sending an empty set.
+          ...(Array.isArray(params.mediaUrls) ? { mediaUrls: params.mediaUrls } : {}),
           imageData: params.imageData || null,
           // Title, description and visibility for a YouTube upload. The
           // backend validates them and stores the resolved values on the post.
@@ -566,6 +601,7 @@ export const handleToolCall = async (name, args, getApiKey, getProjectId = null)
         if (params.scheduleTime !== undefined) payload.scheduleTime = params.scheduleTime;
         if (params.timezone !== undefined) payload.timezone = params.timezone;
         if (params.mediaUrl !== undefined) payload.mediaUrl = params.mediaUrl;
+        if (params.mediaUrls !== undefined) payload.mediaUrls = params.mediaUrls;
         if (params.youtube !== undefined) payload.youtube = params.youtube;
         if (params.status !== undefined) payload.status = params.status;
 

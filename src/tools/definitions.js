@@ -1,7 +1,27 @@
 /**
  * Definitions and JSON Schemas for all MCP tools exposed by the PostMCP AI Server.
  */
-import { PLATFORMS, ANALYTICS_CREDITS_PER_CALL } from "../platforms.js";
+import { PLATFORMS, ANALYTICS_CREDITS_PER_CALL, MEDIA_SET_LIMITS, MAX_MEDIA_ITEMS } from "../platforms.js";
+
+/** One line naming every network's carousel ceiling, for the schemas below. */
+const MEDIA_SET_SUMMARY = Object.entries(MEDIA_SET_LIMITS)
+  .filter(([, limit]) => limit.max > 1)
+  .map(([platform, limit]) => `${platform} ${limit.note}`)
+  .join("; ");
+
+/**
+ * The ordered attachment set: one URL is an ordinary media post, two or more
+ * publish as a carousel or gallery on every network but YouTube. Offered
+ * wherever media can be attached, with the same wording, so a caller who has
+ * seen it once knows it everywhere.
+ */
+const mediaUrlsField = (scope = "the post") => ({
+  type: "array",
+  items: { type: "string" },
+  maxItems: MAX_MEDIA_ITEMS,
+  description:
+    `Public URLs of every image/video to attach to ${scope}, in the order they should appear. One URL is a normal media post; two or more publish as a carousel (Instagram, Threads), a multi-photo post (Facebook, LinkedIn) or a gallery (X, Bluesky). Limits: ${MEDIA_SET_SUMMARY}; YouTube takes one video only. Only Instagram and Threads mix video into a carousel - elsewhere a set of several must be images only. Wins over mediaUrl when both are given. Run preflight_post with the same list to have each target's ceiling checked first.`,
+});
 
 /**
  * Workspace selector, accepted by every tool that reads or writes workspace data.
@@ -57,8 +77,9 @@ const targetAccountItem = (extra = "") => ({
     },
     mediaUrl: {
       type: "string",
-      description: "Media for this profile only, overriding the shared mediaUrl.",
+      description: "Media for this profile only, overriding the shared mediaUrl / mediaUrls.",
     },
+    mediaUrls: mediaUrlsField("this profile only, replacing the shared set"),
     youtube: youtubeUploadDetails("this profile only, when it is a YouTube channel"),
   },
   required: ["platform"],
@@ -187,7 +208,7 @@ export const toolDefinitions = [
   {
     name: "preflight_post",
     description:
-      "Dry-run a post before creating it: checks copy against each platform's character limit, flags profiles that are not connected or need reconnecting, warns when a platform requires media, reports each target's video limit when a video is attached, and reports the credit cost against the workspace balance. Costs nothing and publishes nothing. Run this before create_post whenever the copy is long, carries a link, or targets several platforms.",
+      "Dry-run a post before creating it: checks copy against each platform's character limit, flags profiles that are not connected or need reconnecting, warns when a platform requires media, reports each target's video limit when a video is attached, checks a carousel (mediaUrls) against each target's item ceiling, and reports the credit cost against the workspace balance. Costs nothing and publishes nothing. Run this before create_post whenever the copy is long, carries a link, attaches several files, or targets several platforms.",
     inputSchema: {
       type: "object",
       properties: {
@@ -209,6 +230,7 @@ export const toolDefinitions = [
           type: "string",
           description: "Media that would be attached, if any. A video URL makes the check report per-platform video limits.",
         },
+        mediaUrls: mediaUrlsField("the post"),
         workspaceId,
       },
       required: ["content"],
@@ -217,7 +239,7 @@ export const toolDefinitions = [
   {
     name: "create_post",
     description:
-      "Schedule or immediately publish a post to specific connected social profiles. Prefer targetAccounts so the post lands only on the profiles you name. Every targeted profile becomes its own post with its own id, so each can be edited, retried or cancelled on its own - the response lists them all. With publishImmediately, each delivered profile comes back with a `url` to the live copy; pass those on to the user.",
+      "Schedule or immediately publish a post to specific connected social profiles. Prefer targetAccounts so the post lands only on the profiles you name. Every targeted profile becomes its own post with its own id, so each can be edited, retried or cancelled on its own - the response lists them all. Attach one file with mediaUrl, or several with mediaUrls to publish a carousel (Instagram, Threads), multi-photo post (Facebook, LinkedIn) or gallery (X, Bluesky). With publishImmediately, each delivered profile comes back with a `url` to the live copy; pass those on to the user.",
     inputSchema: {
       type: "object",
       properties: {
@@ -230,8 +252,20 @@ export const toolDefinitions = [
         variants: {
           type: "object",
           description:
-            "Per-platform copy, keyed by platform name (or \"platform:profileId\" for one profile), e.g. { \"twitter\": \"short punchy version\", \"linkedin\": \"longer version\" }. Overrides content for those destinations.",
-          additionalProperties: { type: "string" },
+            "Per-platform copy, keyed by platform name (or \"platform:profileId\" for one profile), e.g. { \"twitter\": \"short punchy version\", \"linkedin\": \"longer version\" }. Overrides content for those destinations. A value may also be an object with content and/or mediaUrl / mediaUrls, e.g. { \"twitter\": { \"mediaUrls\": [\"...four slides...\"] } } to give one network its own cut of a carousel.",
+          additionalProperties: {
+            oneOf: [
+              { type: "string" },
+              {
+                type: "object",
+                properties: {
+                  content: { type: "string" },
+                  mediaUrl: { type: "string" },
+                  mediaUrls: { type: "array", items: { type: "string" }, maxItems: MAX_MEDIA_ITEMS },
+                },
+              },
+            ],
+          },
         },
         targetAccounts: {
           type: "array",
@@ -268,8 +302,9 @@ export const toolDefinitions = [
         mediaUrl: {
           type: "string",
           description:
-            "Optional public URL of an image/video to attach. Use the mediaUrl returned by generate_image to attach a generated image. Video is uploaded natively to every platform, but each has its own ceiling - Bluesky's 60 seconds is usually the binding one - so run preflight_post before sending one clip to several networks. Required, and must be a video file, when the post targets YouTube.",
+            "Optional public URL of one image/video to attach. Use the mediaUrl returned by generate_image to attach a generated image. Video is uploaded natively to every platform, but each has its own ceiling - Bluesky's 60 seconds is usually the binding one - so run preflight_post before sending one clip to several networks. Required, and must be a video file, when the post targets YouTube. For several files, use mediaUrls instead.",
         },
+        mediaUrls: mediaUrlsField("the post"),
         workspaceId,
       },
       required: ["content"],
@@ -309,7 +344,7 @@ export const toolDefinitions = [
   {
     name: "update_post",
     description:
-      "Update the fields (content, target profiles, schedule date/time) of an existing post. To move a post to a different slot without touching anything else, use reschedule_post.",
+      "Update the fields (content, target profiles, schedule date/time, media) of an existing post. Pass mediaUrls to replace the whole attachment set - add or remove carousel slides, or reorder them - and an empty array to remove all media. To move a post to a different slot without touching anything else, use reschedule_post.",
     inputSchema: {
       type: "object",
       properties: {
@@ -350,8 +385,9 @@ export const toolDefinitions = [
         },
         mediaUrl: {
           type: "string",
-          description: "Replacement media URL to attach.",
+          description: "Replacement single media URL. Replaces the whole attachment set with this one file; use mediaUrls to set several.",
         },
+        mediaUrls: mediaUrlsField("the post, replacing whatever is attached now"),
         youtube: youtubeUploadDetails("a post going to a YouTube channel"),
         status: {
           type: "string",

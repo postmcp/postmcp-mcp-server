@@ -199,3 +199,61 @@ test('a backend failure comes back as a tool error, not a silent empty result', 
     assert.equal(result.isError, true);
     assert.match(result.content[0].text, /Access token for twitter is missing or invalid/);
 });
+
+// --- Carousels ------------------------------------------------------------
+
+test('create_post forwards mediaUrls as given and leaves it out when not given', async (t) => {
+    const restore = stubBackend({
+        'POST /post/create': { message: 'Post scheduled', posts: [publishedPost({ status: 'scheduled' })] },
+    });
+    t.after(restore);
+
+    const slides = ['https://cdn.example.com/1.png', 'https://cdn.example.com/2.png', 'https://cdn.example.com/3.png'];
+    await handleToolCall(
+        'create_post',
+        { content: 'Three slides.', platforms: ['instagram'], mediaUrls: slides, scheduleDate: '2026-10-01', scheduleTime: '10:00' },
+        KEY
+    );
+    assert.deepEqual(requests[0].body.mediaUrls, slides);
+
+    await handleToolCall('create_post', { content: 'One file.', platforms: ['instagram'], mediaUrl: slides[0] }, KEY);
+    // A single attachment must not be read by the backend as an empty set.
+    assert.equal('mediaUrls' in requests[1].body, false);
+    assert.equal(requests[1].body.mediaUrl, slides[0]);
+});
+
+test('update_post forwards mediaUrls, including an empty list to strip all media', async (t) => {
+    const restore = stubBackend({ 'PUT /post/post_1': { message: 'Post updated successfully', post: publishedPost() } });
+    t.after(restore);
+
+    await handleToolCall('update_post', { id: 'post_1', mediaUrls: ['https://cdn.example.com/a.png', 'https://cdn.example.com/b.png'] }, KEY);
+    assert.deepEqual(requests[0].body, { mediaUrls: ['https://cdn.example.com/a.png', 'https://cdn.example.com/b.png'] });
+
+    await handleToolCall('update_post', { id: 'post_1', mediaUrls: [] }, KEY);
+    assert.deepEqual(requests[1].body, { mediaUrls: [] });
+});
+
+test('a serialized post carries the whole attachment set, and a legacy post a one-item set', async (t) => {
+    const restore = stubBackend({
+        '/post/list': {
+            posts: [
+                publishedPost({
+                    _id: 'carousel',
+                    mediaUrl: 'https://cdn.example.com/1.png',
+                    mediaUrls: ['https://cdn.example.com/1.png', 'https://cdn.example.com/2.png'],
+                }),
+                publishedPost({ _id: 'legacy', mediaUrl: 'https://cdn.example.com/old.png' }),
+                publishedPost({ _id: 'text' }),
+            ],
+        },
+    });
+    t.after(restore);
+
+    const data = resultOf(await handleToolCall('list_posts', {}, KEY));
+    const byId = Object.fromEntries(data.posts.map((post) => [post.id, post]));
+
+    assert.deepEqual(byId.carousel.mediaUrls, ['https://cdn.example.com/1.png', 'https://cdn.example.com/2.png']);
+    assert.equal(byId.carousel.mediaUrl, 'https://cdn.example.com/1.png');
+    assert.deepEqual(byId.legacy.mediaUrls, ['https://cdn.example.com/old.png']);
+    assert.deepEqual(byId.text.mediaUrls, []);
+});

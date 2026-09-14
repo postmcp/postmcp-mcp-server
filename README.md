@@ -12,7 +12,8 @@ Supported platforms include **LinkedIn**, **X (Twitter)**, **Facebook**, **Insta
 
 ## 🚀 Features & Capabilities
 
-- 🤖 **17 Built-in Tools**: Workspaces, connected accounts and their token health, brand kits, the post queue, pre-flight checks, create/schedule/reschedule/publish/retry/delete, per-post and per-profile analytics, and image generation.
+- 🤖 **17 Built-in Tools**: Workspaces, connected accounts and their token health, the post queue, pre-flight checks, create/schedule/reschedule/publish/retry/delete, per-post and per-profile analytics, and image generation.
+- 🖼️ **Carousels & galleries**: Pass `mediaUrls` to publish a carousel on Instagram and Threads, a multi-photo post on Facebook and LinkedIn, or a four-image gallery on X and Bluesky - one call, every network's ceiling checked up front.
 - ⚡ **Dual Transport Modes**: Native **Stdio mode** (for local desktop apps & IDEs) and **Streamable HTTP mode** (for web services, Claude.ai, and remote connectors).
 - 🔑 **Flexible Authentication**: Auto-detects API key from environment variables (`POSTMCPAI_API_KEY`), URL query parameters (`?apikey=YOUR_KEY`), or HTTP authorization headers (`x-api-key`, `Bearer token`).
 - 🗂️ **Multi-Workspace Aware**: The API key carries its own workspace, so a bare key is enough. To act on another one, every tool takes an optional `workspaceId`, also settable per connection (`?projectId=...`, `x-project-id`) or per process (`POSTMCPAI_PROJECT_ID`).
@@ -82,10 +83,10 @@ Every tool below also accepts an optional `workspaceId` (from `list_workspaces`)
 
 | Tool Name | Description | Required | Optional |
 | :--- | :--- | :--- | :--- |
-| `preflight_post` | Dry run: character limits, unconnected profiles, missing media, credit cost. Publishes nothing. | `content` | `targetAccounts`, `platforms`, `mediaUrl` |
-| `create_post` | Draft, schedule, or immediately publish a post to named profiles. Each profile becomes its own post with its own id. | `content` | `targetAccounts`, `variants`, `platforms`, `publishImmediately`, `scheduleDate`, `scheduleTime`, `timezone`, `mediaUrl` |
+| `preflight_post` | Dry run: character limits, unconnected profiles, missing media, carousel ceilings, credit cost. Publishes nothing. | `content` | `targetAccounts`, `platforms`, `mediaUrl`, `mediaUrls` |
+| `create_post` | Draft, schedule, or immediately publish a post to named profiles. Each profile becomes its own post with its own id. Several `mediaUrls` publish as a carousel. | `content` | `targetAccounts`, `variants`, `platforms`, `publishImmediately`, `scheduleDate`, `scheduleTime`, `timezone`, `mediaUrl`, `mediaUrls`, `youtube` |
 | `publish_post_now` | Publish an existing post immediately; also retries a failed post, skipping delivered profiles. | `id` | — |
-| `update_post` | Update content, target profiles, schedule, media, or status. | `id` | `content`, `targetAccounts`, `platforms`, `scheduleDate`, `scheduleTime`, `timezone`, `mediaUrl`, `status` |
+| `update_post` | Update content, target profiles, schedule, media, or status. `mediaUrls` replaces the whole attachment set. | `id` | `content`, `targetAccounts`, `platforms`, `scheduleDate`, `scheduleTime`, `timezone`, `mediaUrl`, `mediaUrls`, `youtube`, `status` |
 | `reschedule_post` | Move a post to a new slot, keeping copy and targets. Re-arms failed and draft posts. | `id`, `scheduleDate`, `scheduleTime` | `timezone` |
 | `reset_stuck_post` | Release a post stuck mid-publish so it can be retried. Delivered profiles keep their state. | `id` | `force` |
 | `delete_post` | Cancel and delete a scheduled or failed post. | `id` | — |
@@ -120,6 +121,48 @@ Every tool below also accepts an optional `workspaceId` (from `list_workspaces`)
 ```
 
 The reply carries one entry per call — `{ id, tool, ok, result }` or `{ id, tool, ok: false, error }` — plus counts and, when a failure stopped the batch, the calls that were skipped.
+
+### Carousels
+
+`mediaUrls` is the ordered attachment set. One URL is an ordinary media post; two or more publish as a multi-media post on every network but YouTube, with the first URL as the cover:
+
+| Platform | Items per post | Video in a set of several? | Lands as |
+| :--- | ---: | :---: | :--- |
+| Instagram | 2–10 | yes | Carousel |
+| Threads | 2–20 | yes | Carousel |
+| Facebook | up to 10 | no | Multi-photo post |
+| LinkedIn | up to 20 | no | Multi-image post |
+| X / Twitter | up to 4 | no | Gallery on one tweet |
+| Bluesky | up to 4 | no | Gallery on one post |
+| YouTube | 1 | — | One video per upload |
+
+```json
+{
+  "content": "Five things we learned shipping v2 👉",
+  "targetAccounts": [
+    { "platform": "instagram", "profileId": "17841400000000" },
+    { "platform": "threads", "profileId": "9988776655" },
+    { "platform": "twitter", "profileId": "tw_1293847",
+      "mediaUrls": ["https://cdn.example.com/v2/1.png", "https://cdn.example.com/v2/2.png", "https://cdn.example.com/v2/3.png", "https://cdn.example.com/v2/4.png"] }
+  ],
+  "mediaUrls": [
+    "https://cdn.example.com/v2/1.png",
+    "https://cdn.example.com/v2/2.png",
+    "https://cdn.example.com/v2/3.png",
+    "https://cdn.example.com/v2/4.png",
+    "https://cdn.example.com/v2/5.png"
+  ],
+  "scheduleDate": "2026-09-01",
+  "scheduleTime": "10:00",
+  "timezone": "Asia/Kolkata"
+}
+```
+
+- Only Instagram and Threads mix video into a carousel; everywhere else a set of several must be images only, and a video goes out on its own.
+- `create_post` refuses a set a target will not take **before** any credits are spent, naming the profile and the rule. `preflight_post` with the same `mediaUrls` reports the same thing plus a `mediaSetLimits` map, so check first when one carousel goes to several networks.
+- A profile can carry its own `mediaUrls` on its `targetAccounts` entry (or in `variants` as `{ "twitter": { "mediaUrls": [...] } }`), replacing the shared set - the way to give X and Bluesky a four-slide cut of a longer carousel.
+- Every slide is copied into PostMCP's own storage at write time, like a single attachment, so a host that expires the links later does not break the scheduled post. One slide failing at publish time fails that profile's post rather than publishing a shorter carousel; `publish_post_now` retries it.
+- `update_post` with `mediaUrls` replaces the whole set (add, remove or reorder slides); an empty array removes all media. Every post returned by `list_posts` / `get_post` carries `mediaUrls` alongside `mediaUrl`.
 
 ### Notes for clients
 

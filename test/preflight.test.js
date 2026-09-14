@@ -222,3 +222,78 @@ test('a disconnected account is not a valid target', async () => {
     assert.equal(data.ok, false);
     assert.deepEqual(data.resolvedTargets, []);
 });
+
+// --- Carousels ------------------------------------------------------------
+
+const slides = (count, ext = 'png') => Array.from({ length: count }, (_, i) => `https://cdn.example.com/${i + 1}.${ext}`);
+
+test('a carousel within every ceiling passes, and says what each network will make of it', async () => {
+    const data = await preflight(
+        { content: 'Swipe through.', platforms: ['instagram', 'twitter'], mediaUrls: slides(4) },
+        userWith([account('instagram', 'ig1'), account('twitter', 'x1')])
+    );
+
+    assert.equal(data.ok, true);
+    assert.deepEqual(data.blockers, []);
+    assert.equal(data.mediaCount, 4);
+    assert.equal(data.mediaSetLimits.instagram, 'carousel of 2-10 photos or videos');
+    assert.equal(data.mediaSetLimits.twitter, 'up to 4 images, or one video');
+    assert.ok(data.warnings.some((w) => /Carousel of 4/.test(w)));
+});
+
+test('a carousel over one target ceiling is a blocker naming that network only', async () => {
+    const data = await preflight(
+        { content: 'Swipe through.', platforms: ['instagram', 'threads', 'twitter'], mediaUrls: slides(5) },
+        userWith([account('instagram', 'ig1'), account('threads', 't1'), account('twitter', 'x1')])
+    );
+
+    assert.equal(data.ok, false);
+    assert.equal(data.blockers.length, 1);
+    assert.match(data.blockers[0], /twitter takes up to 4 images, or one video; this post attaches 5\. Remove 1/);
+});
+
+test('a video among several slides is fine on the Meta carousels and a blocker elsewhere', async () => {
+    const mixed = [...slides(2), 'https://cdn.example.com/clip.mp4'];
+
+    const meta = await preflight(
+        { content: 'Mixed.', platforms: ['instagram', 'threads'], mediaUrls: mixed },
+        userWith([account('instagram', 'ig1'), account('threads', 't1')])
+    );
+    assert.equal(meta.ok, true);
+    // A video in the set still reports the video limits.
+    assert.ok(meta.videoLimits.instagram);
+
+    const linkedin = await preflight(
+        { content: 'Mixed.', platforms: ['linkedin'], mediaUrls: mixed },
+        userWith([account('linkedin', 'li1')])
+    );
+    assert.equal(linkedin.ok, false);
+    assert.match(linkedin.blockers[0], /linkedin .* will not mix video into a set of several/);
+});
+
+test('mediaUrls satisfies a media-required network and counts as one post for YouTube', async () => {
+    const instagram = await preflight(
+        { content: 'Caption.', platforms: ['instagram'], mediaUrls: slides(2) },
+        userWith([account('instagram', 'ig1')])
+    );
+    assert.equal(instagram.ok, true);
+
+    const youtube = await preflight(
+        { content: 'Two clips.', platforms: ['youtube'], mediaUrls: slides(2, 'mp4') },
+        userWith([account('youtube', 'UC1')])
+    );
+    assert.equal(youtube.ok, false);
+    assert.match(youtube.blockers[0], /youtube takes one video per upload; this post attaches 2/);
+});
+
+test('a one-item mediaUrls list is an ordinary media post, with no carousel fields', async () => {
+    const data = await preflight(
+        { content: 'Photo.', platforms: ['linkedin'], mediaUrls: slides(1) },
+        userWith([account('linkedin', 'li1')])
+    );
+
+    assert.equal(data.ok, true);
+    assert.equal(data.mediaCount, undefined);
+    assert.equal(data.mediaSetLimits, undefined);
+    assert.ok(!data.warnings.some((w) => /Carousel/.test(w)));
+});
