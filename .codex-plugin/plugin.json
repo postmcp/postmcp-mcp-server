@@ -1,6 +1,6 @@
 {
   "name": "postmcpai",
-  "version": "1.1.0",
+  "version": "1.1.2",
   "description": "Connect social accounts through PostMCP AI, create and schedule posts, and review post and profile analytics.",
   "author": {
     "name": "PostMCP AI",
@@ -30,12 +30,16 @@
     "longDescription": "Manage connected social profiles, prepare and schedule posts, and inspect analytics across LinkedIn, X, Facebook, Instagram, Threads, Bluesky and YouTube Shorts. Connect social accounts in the PostMCP dashboard. Supports per-user OAuth on the hosted server and API keys in compatible MCP clients.",
     "developerName": "PostMCP AI",
     "category": "Productivity",
-    "logo": "./assets/logo.png",
-    "composerIcon": "./assets/logo.png",
+    "logo": "./assets/postmcpai-logo.png",
+    "composerIcon": "./assets/postmcpai-composer-icon.png",
     "defaultPrompt": [
       "Help me connect my social accounts to PostMCP AI.",
       "Prepare and schedule a post for my connected accounts.",
       "Show the performance of my recent posts."
-    ]
+    ],
+    "websiteURL": "https://www.postmcpai.com/mcp-server",
+    "supportURL": "https://www.postmcpai.com/docs",
+    "privacyPolicyURL": "https://www.postmcpai.com/privacy",
+    "termsOfServiceURL": "https://www.postmcpai.com/terms"
   }
 }

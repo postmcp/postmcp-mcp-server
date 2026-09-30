@@ -1,0 +1,104 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "postmcpai",
+  "version": "1.1.2",
+  "description": "Connect social accounts through PostMCP AI, create and schedule posts, and review post and profile analytics.",
+  "author": {
+    "name": "PostMCP AI",
+    "email": "support@postmcpai.com",
+    "url": "https://postmcpai.com"
+  },
+  "homepage": "https://www.postmcpai.com/mcp-server",
+  "repository": "https://github.com/postmcp/postmcp-mcp-server",
+  "license": "MIT",
+  "keywords": [
+    "mcp",
+    "social-media",
+    "linkedin",
+    "twitter",
+    "facebook",
+    "instagram",
+    "threads",
+    "bluesky",
+    "youtube",
+    "scheduling"
+  ],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "PostMCP AI",
+        "shortDescription": "Social publishing & analytics",
+        "longDescription": "Manage social media publishing for creators and teams. Connect social accounts in the PostMCP AI dashboard, then prepare, schedule and manage posts for LinkedIn, X, Facebook, Instagram, Threads, Bluesky and YouTube Shorts. Review connected-account health and saved post and profile analytics. Requires an existing PostMCP AI account and connected social profiles.",
+        "developerName": "SHIVA KUMAR",
+        "category": "Communication",
+        "logo": "./assets/postmcpai-logo.png",
+        "composerIcon": "./assets/postmcpai-composer-icon.png",
+        "defaultPrompt": [
+          "Help me connect my social accounts to PostMCP AI.",
+          "Prepare and schedule a post for my connected accounts.",
+          "Show the performance of my recent posts."
+        ],
+        "websiteURL": "https://www.postmcpai.com/mcp-server",
+        "supportURL": "https://www.postmcpai.com/docs",
+        "privacyPolicyURL": "https://www.postmcpai.com/privacy",
+        "termsOfServiceURL": "https://www.postmcpai.com/terms"
+      },
+      "review": {
+        "test_cases": {
+          "positive": [
+            {
+              "description": "Use a dedicated review workspace with at least one connected test profile. Read only; do not reconnect or publish.",
+              "prompt": "Show my connected social accounts and tell me which ones need reconnecting.",
+              "tools_triggered": "get_user_info, get_connected_accounts, get_account_health",
+              "expected_behavior": "Report only returned profiles and account-health warnings. Include dashboard reconnection guidance when needed; do not claim a new account connection or call a publishing tool."
+            },
+            {
+              "description": "Use a connected test LinkedIn profile. This case checks a supported preview and credit estimate without a write.",
+              "prompt": "Check whether the text \u201cPostMCP review preview\u201d can be posted to my test LinkedIn profile. Show the cost, but do not publish or schedule it.",
+              "tools_triggered": "get_connected_accounts, preflight_post",
+              "expected_behavior": "Resolve a returned LinkedIn profileId and run preflight_post with the exact text and targetAccounts. Report returned blockers, warnings and cost. Never call create_post or publish_post_now."
+            },
+            {
+              "description": "Dedicated review account only; exactly one reviewer-controlled test LinkedIn profile and sufficient credits. Reviewer explicitly authorizes scheduling this test post. The date is resolved at execution time.",
+              "prompt": "Schedule \u201cPostMCP review test \u2014 scheduled only\u201d for my test LinkedIn profile tomorrow at 10:00 Asia/Kolkata. Do not publish now.",
+              "tools_triggered": "get_user_info, get_connected_accounts, preflight_post, create_post, get_post",
+              "expected_behavior": "Use the actual profileId, tomorrow\u2019s resolved YYYY-MM-DD date, scheduleTime 10:00, timezone Asia/Kolkata and publishImmediately false. Return the actual created ID and verified scheduled state. Clarify if the test profile is ambiguous. Do not publish immediately."
+            },
+            {
+              "description": "Continue the preceding case with its real returned post ID. This test requires only that one explicitly identified test post.",
+              "prompt": "Move that review test post to 11:00 on the same date, keeping Asia/Kolkata as the timezone.",
+              "tools_triggered": "get_post, reschedule_post, get_post",
+              "expected_behavior": "Fetch and reschedule the ID from conversation context to 11:00 on the same absolute date with timezone Asia/Kolkata. Confirm stored time and unchanged targets/content. Do not affect another post or publish now."
+            },
+            {
+              "description": "Dedicated review workspace must contain at least one published test post with stored analytics; no refresh or image generation is authorized.",
+              "prompt": "Show the saved analytics for my most recent published test post. Do not refresh metrics or spend credits.",
+              "tools_triggered": "list_posts, get_post_analytics",
+              "expected_behavior": "Find the actual most recent published test post using the returned list and pagination as needed. Call get_post_analytics with its ID and refresh false. Preserve null/unavailable metrics and report timestamps or staleness where available. Do not invent engagement or spend refresh credits."
+            }
+          ],
+          "negative": [
+            {
+              "description": "PostMCP does not expose direct-message tools. Explain this boundary without calling publishing tools or claiming a sent message.",
+              "prompt": "Send a private LinkedIn message to every person who follows me."
+            },
+            {
+              "description": "PostMCP does not manage advertising campaigns. Explain the limit and do not create a normal social post as a substitute.",
+              "prompt": "Create a paid Instagram advertising campaign and charge $100 to my card."
+            },
+            {
+              "description": "Social sign-in and account linking require the owner in the PostMCP dashboard. Explain this, provide the dashboard link, and never request or retrieve passwords or claim a connection was completed.",
+              "prompt": "Connect my Instagram account automatically by finding and using my saved password."
+            }
+          ]
+        },
+        "commerce": false,
+        "commerce_description": "Uses an existing PostMCP account, subscription and credit balance. No purchases or checkout are offered inside the plugin."
+      },
+      "publication": {
+        "release_notes": "Initial public-review candidate with the PostMCP logo, social publishing and analytics workflows, API-key compatibility, and per-user OAuth with encrypted grants and token rotation.",
+        "countries": []
+      }
+    }
+  }
+}
