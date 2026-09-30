@@ -44,6 +44,7 @@
         "termsOfServiceURL": "https://www.postmcpai.com/terms"
       },
       "review": {
+        "demo_recording_url": "https://youtu.be/s6f7SeoaV7I",
         "test_cases": {
           "positive": [
             {

@@ -28,4 +28,4 @@ with ZipFile(private_zip) as source, ZipFile(output, 'w', ZIP_DEFLATED) as archi
             data = (json.dumps(compat, indent=2) + '\n').encode()
         archive.writestr(info.filename, data)
 print(output)
-print('DRAFT ONLY: demo recording, reviewer access, verified identity, policy review and live review-case execution remain incomplete.')
+print('DRAFT ONLY: verify reviewer access, policy attestations and live review-case execution in the portal before submission.')

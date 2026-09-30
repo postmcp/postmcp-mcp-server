@@ -23,8 +23,9 @@ contains operator-supplied configuration. Package only the explicit allowlist.
 - Run OAuth and tool tests through the installed plugin after deployment.
 - Country targeting and commerce confirmed by the publisher: all available
   countries, existing subscriptions, no in-plugin purchases. Written to the draft.
-- Complete a real demo recording, host it at a reviewer-accessible URL and verify
-  playback. No recording has been created and no URL is invented.
+- Demo supplied: https://youtu.be/s6f7SeoaV7I (4:11, Unlisted). Browser playback
+  and sampled ChatGPT account-listing/publishing interactions verified September 30.
+  Full recording coverage and a complete credential-exposure audit are not certified.
 - Provide a dedicated reviewer account through the portal's secure access fields.
   Do not put an API key, password, login token or reviewer credential in this folder.
 - Verify the published privacy policy covers the new MCP consent credential store
@@ -78,11 +79,14 @@ name; the plugin title remains PostMCP AI. The public submission identifier and
 exact saved version are in `portal-draft.json`. The original private plugin is
 unchanged by this public upload.
 
-Portal status: **Not submitted**, **Not published**, MCP configuration incomplete.
-The endpoint imported correctly as `https://mcp.postmcpai.com/mcp`; the saved
-skill is `social-publishing`. Domain verification, MCP connection/discovery,
-reviewer access, real demo recording, review-case execution and publisher
-attestations remain required. Do not equate the uploaded draft with public release.
+Portal status checked September 30: **Not submitted**, **Not published**, MCP configuration **Configured**.
+The endpoint is `https://mcp.postmcpai.com/mcp`; the saved skill is
+`social-publishing`. The demo URL https://youtu.be/s6f7SeoaV7I was added to the
+existing 1.1.2 draft and read back from Supporting review content on September 30.
+Metadata checks returned No Issues; configured MCP state and all eight case
+definitions were preserved. Reviewer credential fields are blank. Reviewer access,
+review-case execution and publisher attestations still need completion.
+Do not equate the uploaded draft with public release.
 
 ### Domain verification next step
 
