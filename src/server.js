@@ -10,7 +10,7 @@ import { toolDefinitions, handleToolCall } from "./tools/index.js";
  * @param {string|Function|null} projectIdOrGetter - Default workspace id, or a getter returning it. A tool call naming its own workspaceId overrides this.
  * @returns {Server} An initialized MCP Server instance
  */
-export const createServer = (apiKeyOrGetter = null, projectIdOrGetter = null) => {
+export const createServer = (apiKeyOrGetter = null, projectIdOrGetter = null, { oauthEnabled = false } = {}) => {
   const getApiKey = () => {
     if (typeof apiKeyOrGetter === "function") {
       return apiKeyOrGetter();
@@ -40,7 +40,15 @@ export const createServer = (apiKeyOrGetter = null, projectIdOrGetter = null) =>
   // Register tool list request handler
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     return {
-      tools: toolDefinitions,
+      tools: toolDefinitions.map((tool) => ({
+        ...tool,
+        ...(oauthEnabled ? { securitySchemes: [{ type: 'oauth2', scopes: ['mcp'] }], _meta: { securitySchemes: [{ type: 'oauth2', scopes: ['mcp'] }] } } : {}),
+        annotations: {
+          readOnlyHint: ['get_user_info', 'list_workspaces', 'get_connected_accounts', 'get_account_health', 'list_posts', 'get_post', 'preflight_post'].includes(tool.name),
+          destructiveHint: ['update_post', 'delete_post', 'multicall'].includes(tool.name),
+          openWorldHint: true,
+        },
+      })),
     };
   });
 

@@ -1,5 +1,5 @@
 import express from "express";
-import { extractApiKey, extractProjectId } from "../client.js";
+import { extractProjectId } from "../client.js";
 import { toolDefinitions, handleToolCall } from "../tools/index.js";
 
 const router = express.Router();
@@ -24,6 +24,8 @@ const generateOpenApiSchema = (baseUrl) => ({
     description: "Social media publishing, scheduling, and management tools for PostMCP AI.",
   },
   servers: [{ url: baseUrl }],
+  components: { securitySchemes: { bearerAuth: { type: "http", scheme: "bearer" } } },
+  security: [{ bearerAuth: [] }],
   paths: Object.fromEntries(
     toolDefinitions.map((tool) => [
       `/api/tools/${tool.name}`,
@@ -58,7 +60,7 @@ router.get("/openapi.json", (req, res) => {
 router.post("/api/tools/:name", express.json(), async (req, res) => {
   const { name } = req.params;
   const args = req.body || {};
-  const apiKey = extractApiKey(req);
+  const apiKey = req.postmcpAuth.apiKey;
   const projectId = extractProjectId(req);
   console.error(`[PostMCP ChatGPT Action]: Executing tool '${name}'`);
 

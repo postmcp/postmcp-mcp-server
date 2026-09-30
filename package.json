@@ -1,6 +1,6 @@
 {
   "name": "@postmcpai/server",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Official Model Context Protocol (MCP) Server for PostMCP AI. Integrate multi-platform social media publishing into your AI clients, Claude.ai, Cursor, and Custom GPTs.",
   "type": "module",
   "main": "./src/index.js",
@@ -26,13 +26,16 @@
     "start:sse": "PORT=3000 node index.js",
     "start:stdio": "node index.js",
     "dev": "PORT=3000 node --watch index.js",
-    "test": "node --test 'test/*.test.js'"
+    "test": "node --test test/*.test.js",
+    "package:plugin": "python3 scripts/package-plugin.py"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "cors": "^2.8.6",
     "dotenv": "^16.4.5",
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.7.0",
+    "mongodb": "^6.21.0"
   },
   "keywords": [
     "mcp",

@@ -17,6 +17,7 @@ const main = async () => {
     // Remote Streamable HTTP Mode (for web clients, Claude.ai, etc.)
     const app = createExpressApp();
 
+    if (app.locals.oauth) await app.locals.oauth.store.collection();
     app.listen(PORT, () => {
       console.error(`[PostMCP Server]: Remote MCP Server listening on port ${PORT}`);
       console.error(`[PostMCP Server]: MCP Endpoint: http://localhost:${PORT}/mcp`);

@@ -1,11 +1,44 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "postmcpai",
-  "version": "1.0.1",
-  "description": "Publish and schedule posts to LinkedIn, X, Facebook, Instagram, Threads, Bluesky and YouTube Shorts.",
-  "author": { "name": "PostMCP AI", "email": "support@postmcpai.com", "url": "https://postmcpai.com" },
+  "version": "1.1.0",
+  "description": "Connect social accounts through PostMCP AI, create and schedule posts, and review post and profile analytics.",
+  "author": {
+    "name": "PostMCP AI",
+    "email": "support@postmcpai.com",
+    "url": "https://postmcpai.com"
+  },
   "homepage": "https://www.postmcpai.com/mcp-server",
   "repository": "https://github.com/postmcp/postmcp-mcp-server",
   "license": "MIT",
-  "keywords": ["mcp", "social-media", "linkedin", "twitter", "facebook", "instagram", "threads", "bluesky", "youtube", "scheduling"]
+  "keywords": [
+    "mcp",
+    "social-media",
+    "linkedin",
+    "twitter",
+    "facebook",
+    "instagram",
+    "threads",
+    "bluesky",
+    "youtube",
+    "scheduling"
+  ],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "PostMCP AI",
+        "shortDescription": "Social publishing & analytics",
+        "longDescription": "Manage connected social profiles, prepare and schedule posts, and inspect analytics across LinkedIn, X, Facebook, Instagram, Threads, Bluesky and YouTube Shorts. Connect social accounts in the PostMCP dashboard. Supports per-user OAuth on the hosted server and API keys in compatible MCP clients.",
+        "developerName": "PostMCP AI",
+        "category": "Productivity",
+        "logo": "./assets/logo.png",
+        "composerIcon": "./assets/logo.png",
+        "defaultPrompt": [
+          "Help me connect my social accounts to PostMCP AI.",
+          "Prepare and schedule a post for my connected accounts.",
+          "Show the performance of my recent posts."
+        ]
+      }
+    }
+  }
 }

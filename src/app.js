@@ -1,8 +1,9 @@
 import express from "express";
 import cors from "cors";
-import oauthRoutes from "./routes/oauth.js";
+import { createOAuthRouter, oauthFromEnvironment } from "./routes/oauth.js";
+import { authenticateRequest, validateApiKey } from "./auth/request.js";
 import openapiRoutes from "./routes/openapi.js";
-import mcpHttpRoutes from "./routes/mcpHttp.js";
+import { createMcpHttpRouter } from "./routes/mcpHttp.js";
 import healthRoutes from "./routes/health.js";
 
 /**
@@ -10,15 +11,16 @@ import healthRoutes from "./routes/health.js";
  *
  * @returns {import("express").Express} Configured Express application instance
  */
-export const createExpressApp = () => {
+export const createExpressApp = ({ oauth = oauthFromEnvironment(), validateKey = validateApiKey } = {}) => {
   const app = express();
 
-  app.set("trust proxy", true);
+  // Configure the known proxy hop count; never trust arbitrary forwarded IPs.
+  app.set("trust proxy", Number(process.env.POSTMCPAI_TRUST_PROXY_HOPS || 0));
 
   app.use(
     cors({
       origin: true,
-      exposedHeaders: ["Mcp-Session-Id"],
+      exposedHeaders: ["Mcp-Session-Id", "WWW-Authenticate"],
       allowedHeaders: [
         "Content-Type",
         "Authorization",
@@ -34,15 +36,21 @@ export const createExpressApp = () => {
 
   // Request logger middleware for debugging client requests
   app.use((req, res, next) => {
-    console.error(`[PostMCP HTTP Request]: ${req.method} ${req.url}`);
+    console.error(`[PostMCP HTTP Request]: ${req.method} ${req.path}`);
     next();
   });
 
   // Attach router modules
-  app.use(oauthRoutes);
+  app.use(createOAuthRouter(oauth));
+  app.use(["/mcp", "/api/tools"], authenticateRequest(oauth, validateKey));
   app.use(openapiRoutes);
-  app.use(mcpHttpRoutes);
+  app.use(createMcpHttpRouter({ oauthEnabled: Boolean(oauth) }));
   app.use(healthRoutes);
 
+  app.use((error, _req, res, _next) => {
+    console.error("[PostMCP HTTP Error]", error.name);
+    if (!res.headersSent) res.status(500).json({ error: "server_error" });
+  });
+  app.locals.oauth = oauth;
   return app;
 };

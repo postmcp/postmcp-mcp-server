@@ -18,7 +18,8 @@ Supported platforms include **LinkedIn**, **X (Twitter)**, **Facebook**, **Insta
 - 🔑 **Flexible Authentication**: Auto-detects API key from environment variables (`POSTMCPAI_API_KEY`), URL query parameters (`?apikey=YOUR_KEY`), or HTTP authorization headers (`x-api-key`, `Bearer token`).
 - 🗂️ **Multi-Workspace Aware**: The API key carries its own workspace, so a bare key is enough. To act on another one, every tool takes an optional `workspaceId`, also settable per connection (`?projectId=...`, `x-project-id`) or per process (`POSTMCPAI_PROJECT_ID`).
 - 🤖 **ChatGPT Actions Compatible**: Includes built-in OpenAPI 3.0 specification generator (`/openapi.json`) and REST endpoints (`/api/tools/:name`) for ChatGPT Custom GPT integration.
-- 🔒 **OAuth 2.0 & RFC 9728 Support**: Advertises PKCE authorization server metadata for seamless dynamic client registration with Claude.ai.
+- 🔒 **OAuth with PKCE and RFC 9728**: Per-user consent, persistent encrypted grants, rotating tokens and DCR for ChatGPT/Codex. Requires the production settings in [OAUTH.md](OAUTH.md); API-key clients remain supported.
+- 🧩 **Installable plugin**: Account onboarding, publishing, scheduling and analytics workflows. See [PLUGIN.md](PLUGIN.md) and run `npm run package:plugin`.
 
 ---
 
@@ -219,8 +220,8 @@ Host this server on any cloud service (Render, Railway, Fly.io, Vercel) or tunne
 
 #### Launching in HTTP Mode:
 ```bash
-export POSTMCPAI_API_KEY="pmcp_sec_your_secret_api_key_here"
 export PORT=3000
+# Each remote caller supplies its own API key or OAuth token.
 
 npm run start:sse
 ```
@@ -238,7 +239,7 @@ npm run start:sse
 1. When configuring a **Custom GPT Action**, specify your server URL (e.g. `https://your-hosted-domain.com`).
 2. Import the OpenAPI schema directly from:
    `https://your-hosted-domain.com/openapi.json`
-3. Set Authentication to **API Key** (Header Name: `Authorization` or `x-api-key`).
+3. Set Authentication to **API Key** (Bearer `Authorization` or custom `x-api-key`). This is a GPT Actions integration, not a per-customer OAuth plugin. For the plugin, use [OAUTH.md](OAUTH.md).
 
 ---
 

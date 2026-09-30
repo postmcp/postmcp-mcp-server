@@ -2,12 +2,8 @@
   "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
   "mcpServers": {
     "postmcpai": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "@postmcpai/server"],
-      "env": {
-        "POSTMCPAI_API_KEY": "${POSTMCPAI_API_KEY}"
-      }
+      "type": "streamable-http",
+      "url": "https://mcp.postmcpai.com/mcp"
     }
   }
 }
