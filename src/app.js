@@ -1,10 +1,14 @@
 import express from "express";
 import cors from "cors";
+import { readFileSync } from "node:fs";
 import { createOAuthRouter, oauthFromEnvironment } from "./routes/oauth.js";
 import { authenticateRequest, validateApiKey } from "./auth/request.js";
 import openapiRoutes from "./routes/openapi.js";
 import { createMcpHttpRouter } from "./routes/mcpHttp.js";
 import healthRoutes from "./routes/health.js";
+
+// Public ownership proof for the verified OpenAI submission, not an API credential.
+const openaiDomainChallenge = readFileSync(new URL('./openai-apps-challenge', import.meta.url), 'utf8').trim();
 
 /**
  * Creates and configures the Express application with CORS, middlewares, and routes.
@@ -41,6 +45,9 @@ export const createExpressApp = ({ oauth = oauthFromEnvironment(), validateKey =
   });
 
   // Attach router modules
+  app.get('/.well-known/openai-apps-challenge', (_req, res) => {
+    res.set('Cache-Control', 'no-store').type('text/plain').send(openaiDomainChallenge);
+  });
   app.use(createOAuthRouter(oauth));
   app.use(["/mcp", "/api/tools"], authenticateRequest(oauth, validateKey));
   app.use(openapiRoutes);

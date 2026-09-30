@@ -100,3 +100,14 @@ The revised metadata checks passed with No Issues. All five positive
 and three negative case definitions and all-country targeting imported correctly.
 A case marked complete in the portal means its definition is populated, not
 that the case was executed.
+
+### Deployment verification follow-up
+
+The live server responded successfully for health and OAuth discovery, but the
+OpenAI domain challenge returned 404 after deployment. The earlier submission
+file alone was not served by Express. `src/app.js` now serves the bundled
+`src/openai-apps-challenge` at the required well-known URL without authentication.
+Redeploy these source changes; no environment-variable changes are required.
+Local HTTP verification returned the exact token with text/plain and confirmed
+MCP remains protected (401). All 11 OAuth tests passed. Domain verification in
+the public portal remains pending deployment of this route.
