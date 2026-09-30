@@ -38,8 +38,11 @@ export function createOAuthRouter(provider) {
   router.use('/oauth/register', clientRegistrationHandler({ clientsStore: provider.clientsStore, clientSecretExpirySeconds: 0 }));
   router.use('/oauth/revoke', revocationHandler({ provider }));
   router.use('/oauth/consent', rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: 'draft-8', legacyHeaders: false }));
-  router.use('/oauth/consent', (_req, res, next) => {
-    res.set({ 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer', 'X-Frame-Options': 'DENY',
+  router.use('/oauth/consent', (req, res, next) => {
+    // no-referrer on the form page makes browsers send Origin: null on POST.
+    // Preserve same-origin form attribution; suppress referrers to external sites
+    // and on the callback redirect. Keep the strict POST origin check below.
+    res.set({ 'Cache-Control': 'no-store', 'Referrer-Policy': req.method === 'GET' ? 'same-origin' : 'no-referrer', 'X-Frame-Options': 'DENY',
       'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'" });
     next();
   });
@@ -52,6 +55,10 @@ export function createOAuthRouter(provider) {
   router.get('/oauth/consent', async (req, res) => {
     const record = await pending(req, req.query.transaction);
     if (!record) return res.status(400).send('This connection request expired. Start again from your MCP client.');
+    // Chromium applies form-action to the OAuth redirect as well as the POST.
+    // Only permit this issuer and the already-validated, registered callback origin.
+    const callbackOrigin = new URL(record.redirectUri).origin;
+    res.set('Content-Security-Policy', `default-src 'none'; style-src 'unsafe-inline'; form-action 'self' ${issuer} ${callbackOrigin}; frame-ancestors 'none'; base-uri 'none'`);
     const name = escapeHtml(record.clientName);
     res.type('html').send(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Connect PostMCP AI</title>
 <style>body{font:16px system-ui;color:#142d25;background:#f4f7f5;margin:0;padding:48px 20px}main{max-width:480px;margin:auto;padding:32px;background:white;border:1px solid #d8e3dc;border-radius:20px}h1{font-size:28px}p,li{line-height:1.55}input{box-sizing:border-box;width:100%;padding:13px;margin:10px 0 20px;border:1px solid #9aafa4;border-radius:8px}button{padding:12px 18px;border:0;border-radius:8px;font:inherit;cursor:pointer}button[value=allow]{background:#174f39;color:white}a{color:#174f39}small{display:block;margin-top:18px}</style>

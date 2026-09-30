@@ -108,3 +108,23 @@ verification, redirect matching and endpoint rate limits. The application layer
 supplies explicit consent, persistent grants, encrypted credentials, resource
 binding and revocation. ChatGPT supports this DCR OAuth flow; it cannot present
 a different custom API key for each customer through a hosted MCP plugin.
+
+### Consent form reports “Invalid request origin”
+
+The consent page must send `Referrer-Policy: same-origin`. A `no-referrer`
+policy on an HTML form page makes Chromium send `Origin: null` on its POST,
+which the strict origin check rejects before API-key validation. Keep rejecting
+missing, null and foreign origins; do not bypass this check. POST responses
+retain `no-referrer` so callbacks do not receive the consent URL.
+
+The form page's CSP also includes only the configured issuer and the registered
+callback origin in `form-action`, because Chromium checks redirect destinations.
+After deploying the fix, restart Connect from the OpenAI portal to obtain a fresh
+consent page. Do not resubmit an old page loaded before deployment. If a proxy
+adds its own Referrer-Policy or CSP headers, ensure it does not overwrite these
+route-specific headers.
+
+Regression verification: the old form policy reproduced `Origin: null` in a real
+browser. The corrected form completed authorization to a separate loopback-origin
+callback in Chrome using dummy credentials. All 11 OAuth tests passed, including
+origin rejection, browser-cookie binding, replay protection and token exchange.
