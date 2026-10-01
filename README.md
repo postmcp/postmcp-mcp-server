@@ -12,7 +12,7 @@ Supported platforms include **LinkedIn**, **X (Twitter)**, **Facebook**, **Insta
 
 ## 🚀 Features & Capabilities
 
-- 🤖 **17 Built-in Tools**: Workspaces, connected accounts and their token health, the post queue, pre-flight checks, create/schedule/reschedule/publish/retry/delete, per-post and per-profile analytics, and image generation.
+- 🤖 **20 Built-in Tools**: Workspaces, connected accounts and their token health, the post queue, pre-flight checks, create/schedule/reschedule/publish/retry/delete, per-post and per-profile analytics, media uploads, image generation, and batching.
 - 🖼️ **Carousels & galleries**: Pass `mediaUrls` to publish a carousel on Instagram and Threads, a multi-photo post on Facebook and LinkedIn, or a four-image gallery on X and Bluesky - one call, every network's ceiling checked up front.
 - ⚡ **Dual Transport Modes**: Native **Stdio mode** (for local desktop apps & IDEs) and **Streamable HTTP mode** (for web services, Claude.ai, and remote connectors).
 - 🔑 **Flexible Authentication**: Auto-detects API key from environment variables (`POSTMCPAI_API_KEY`), URL query parameters (`?apikey=YOUR_KEY`), or HTTP authorization headers (`x-api-key`, `Bearer token`).
@@ -92,6 +92,22 @@ Every tool below also accepts an optional `workspaceId` (from `list_workspaces`)
 | `reset_stuck_post` | Release a post stuck mid-publish so it can be retried. Delivered profiles keep their state. | `id` | `force` |
 | `delete_post` | Cancel and delete a scheduled or failed post. | `id` | — |
 | `generate_image` | Generate a post image and return its hosted URL for `mediaUrl`. Costs 20 credits; paid plans only. | `prompt` | `styleImageUrl` |
+| `create_media_upload_url` | Authorize a direct image/video upload; returns a signed PUT URL and the future public URL. | `fileName`, `contentType`, `fileSize` | `workspaceId` |
+| `complete_media_upload` | Register a successfully uploaded file in the media library and return `mediaUrl`. | `url`, `key`, `fileName`, `contentType`, `fileSize` | `workspaceId` |
+| `import_media_from_url` | Copy a public image/video into storage and the media library; returns `mediaUrl`. | `url` | `workspaceId` |
+
+### Media uploads
+
+For a local file, the MCP client needs an HTTP upload capability:
+
+1. Call `create_media_upload_url` with `fileName`, `contentType` (MIME type), and `fileSize` (bytes). For example: `{ "fileName": "launch.png", "contentType": "image/png", "fileSize": 245760 }`.
+2. PUT the raw file bytes to the returned `uploadUrl` with the returned `headers`. Do not send your PostMCP API key to storage. The URL expires after `expiresIn` seconds (normally 900); request another if it expires. The file is not uploaded merely by creating the URL.
+3. After the PUT succeeds, call `complete_media_upload` with the returned `publicUrl` as `url`, the returned `key`, and the same file metadata. Use the same `workspaceId` on both tools. This registers the file; it does not transfer or verify the bytes.
+4. Use the returned `mediaUrl` in `create_post` or `update_post`, or collect several URLs in `mediaUrls` for a carousel.
+
+For an existing public file, call `import_media_from_url` with `{ "url": "https://example.com/launch.png" }`. The backend downloads it and returns the stored `mediaUrl` in one call. The URL must serve the file directly without authentication; private-network URLs are rejected by the backend.
+
+Storage supports PNG, JPEG, GIF, WebP, AVIF, HEIC, MP4, MOV, WebM and M4V, with a 25 MiB image ceiling and a 512 MiB video ceiling. Individual social platforms have stricter publishing requirements; use `preflight_post` before publishing. File bytes and base64 never travel through the MCP JSON request. If library registration fails after storage succeeds, the result includes `librarySaved: false` and a warning while preserving the usable `mediaUrl`.
 
 ### Batching
 

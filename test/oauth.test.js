@@ -192,11 +192,11 @@ test('MCP SDK discovers all tools through API key and OAuth; sessions reject oth
     const client = new Client({ name: 'integration-test', version: '1.0.0' });
     await client.connect(transport);
     const tools = await client.listTools();
-    assert.equal(tools.tools.length, 17);
+    assert.equal(tools.tools.length, 20);
     const info = await client.callTool({ name: 'get_user_info', arguments: {} });
     assert.equal(JSON.parse(info.content[0].text).credits, 42);
     assert.equal(seen.at(-1), `Bearer ${key}`); // OAuth token is never passed upstream.
-    for (const name of ['create_post', 'reschedule_post', 'get_post_analytics', 'get_connected_accounts']) assert.ok(tools.tools.some((tool) => tool.name === name));
+    for (const name of ['create_post', 'reschedule_post', 'get_post_analytics', 'get_connected_accounts', 'create_media_upload_url', 'complete_media_upload', 'import_media_from_url']) assert.ok(tools.tools.some((tool) => tool.name === name));
     for (const method of ['GET', 'POST', 'DELETE']) {
       assert.equal((await f.request('/mcp', { method, headers: { 'Mcp-Session-Id': transport.sessionId, Authorization: `Bearer ${otherKey}` } })).status, 403);
       assert.equal((await f.request('/mcp', { method, headers: { 'Mcp-Session-Id': transport.sessionId } })).status, 401);

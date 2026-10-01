@@ -36,6 +36,12 @@ const workspaceId = {
     "Workspace (project) id to act on, from list_workspaces. Omit to use the caller's default workspace. Always pass this when the user belongs to more than one workspace.",
 };
 
+const uploadMetadata = {
+  fileName: { type: "string", minLength: 1, description: "Original filename including its extension, e.g. launch.png or demo.mp4." },
+  contentType: { type: "string", minLength: 1, description: "The file's MIME type, e.g. image/png or video/mp4. Use the same Content-Type for the storage PUT." },
+  fileSize: { type: "integer", minimum: 1, description: "Actual file size in bytes. Storage accepts images up to 25 MiB and videos up to 512 MiB; publishing limits vary by platform." },
+};
+
 /**
  * What a YouTube upload is sent with. YouTube's developer policies require
  * that the person uploading can set the title, description and privacy status
@@ -447,6 +453,44 @@ export const toolDefinitions = [
         workspaceId,
       },
       required: ["id"],
+    },
+  },
+  {
+    name: "create_media_upload_url",
+    description:
+      "Start an image or video upload to PostMCP storage. Returns a short-lived uploadUrl, publicUrl, key and expiresIn (seconds). The client must PUT the raw file bytes to uploadUrl with the returned headers, then call complete_media_upload in the same workspace. This tool only authorizes the upload; the file does not exist yet. Supports PNG, JPEG, GIF, WebP, AVIF, HEIC, MP4, MOV, WebM and M4V. If the file is already at a public URL, use import_media_from_url instead. Never send base64 or a local file path as mediaUrl.",
+    inputSchema: {
+      type: "object",
+      properties: { ...uploadMetadata, workspaceId },
+      required: ["fileName", "contentType", "fileSize"],
+    },
+  },
+  {
+    name: "complete_media_upload",
+    description:
+      "Add an uploaded file to the workspace media library and return mediaUrl for create_post or update_post. Call only after the client's PUT to the uploadUrl from create_media_upload_url succeeds. Pass that response's publicUrl as url, its key, the original file metadata, and the same workspaceId. This registers the file; it does not transfer bytes or verify that the PUT succeeded. Uploading media does not publish a social post.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        url: { type: "string", minLength: 1, description: "The publicUrl returned by create_media_upload_url, after a successful upload." },
+        key: { type: "string", minLength: 1, description: "The storage key returned by create_media_upload_url." },
+        ...uploadMetadata,
+        workspaceId,
+      },
+      required: ["url", "key", "fileName", "contentType", "fileSize"],
+    },
+  },
+  {
+    name: "import_media_from_url",
+    description:
+      "Download a publicly accessible image or video into PostMCP storage and add it to the workspace media library. Returns mediaUrl for create_post, update_post or an ordered mediaUrls carousel. The backend validates the source URL, file type and size. Local paths, private network URLs and links requiring authentication are not supported. This stores media without publishing a post.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        url: { type: "string", minLength: 1, description: "Public HTTP(S) URL serving the image or video file directly." },
+        workspaceId,
+      },
+      required: ["url"],
     },
   },
   {

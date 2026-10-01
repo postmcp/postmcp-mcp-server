@@ -40,6 +40,34 @@ const fail = (message) => ({
   content: [{ type: "text", text: message }],
 });
 
+// REST callers can bypass the advertised schemas. Check metadata before
+// asking the backend to authorize an upload or write a library entry.
+const uploadMetadataOf = (params) => {
+  for (const field of ["fileName", "contentType"]) {
+    if (typeof params[field] !== "string" || !params[field].trim()) {
+      throw new Error(`${field} is required.`);
+    }
+  }
+  if (!Number.isSafeInteger(params.fileSize) || params.fileSize <= 0) {
+    throw new Error("fileSize must be a positive integer in bytes.");
+  }
+  return {
+    fileName: params.fileName.trim(),
+    contentType: params.contentType.split(";")[0].trim().toLowerCase(),
+    fileSize: params.fileSize,
+  };
+};
+
+const mediaHttpUrl = (value) => {
+  let url;
+  try { url = new URL(value); } catch { /* Report the same actionable error below. */ }
+  if (typeof value !== "string" || !url || !["http:", "https:"].includes(url.protocol) || url.username || url.password) {
+    throw new Error("url must be a public HTTP(S) media URL without embedded credentials.");
+  }
+  // Private-network and storage-host checks remain in the backend.
+  return value;
+};
+
 /** Flattens the workspace's connectedAccounts map into one list of profiles. */
 const flattenAccounts = (connectedAccounts = {}) => {
   const connected = [];
@@ -627,6 +655,40 @@ export const handleToolCall = async (name, args, getApiKey, getProjectId = null)
           force: params.force ?? false,
         });
         return ok(result);
+      }
+
+      case "create_media_upload_url": {
+        const metadata = uploadMetadataOf(params);
+        const result = await callBackend("/media/upload-url", "POST", metadata);
+        return ok({
+          ...result,
+          method: "PUT",
+          headers: { "Content-Type": metadata.contentType },
+          uploaded: false,
+          nextStep: "PUT the raw file bytes to uploadUrl using the returned headers (no PostMCP API key). After the PUT succeeds, call complete_media_upload with url=publicUrl, key, the original file metadata and the same workspaceId. Do not use publicUrl in a post until the upload succeeds.",
+        });
+      }
+
+      case "complete_media_upload": {
+        const metadata = uploadMetadataOf(params);
+        const url = mediaHttpUrl(params.url);
+        if (typeof params.key !== "string" || !params.key.trim()) return fail("key is required from create_media_upload_url.");
+        const result = await callBackend("/media/assets", "POST", { url, key: params.key, ...metadata });
+        return ok({
+          ...result,
+          mediaUrl: url,
+          librarySaved: Boolean(result.asset),
+          ...(!result.asset ? { warning: "The file URL is usable after a successful PUT, but it was not saved to the media library. Retry complete_media_upload to register it." } : {}),
+        });
+      }
+
+      case "import_media_from_url": {
+        const result = await callBackend("/media/import-url", "POST", { url: mediaHttpUrl(params.url) });
+        return ok({
+          ...result,
+          librarySaved: Boolean(result.asset),
+          ...(!result.asset ? { warning: "The file was imported and mediaUrl is usable, but it was not saved to the media library." } : {}),
+        });
       }
 
       case "generate_image": {
